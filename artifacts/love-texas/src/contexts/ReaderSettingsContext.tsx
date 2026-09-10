@@ -10,6 +10,11 @@ export interface ReaderSettings {
   textColor: string; // reading text color
   backgroundColor: string; // app and reader background
   autoSave: boolean;
+  fontWeight: 400 | 500 | 600;
+  firstLineIndent: boolean;
+  pageMargin: 'compact' | 'comfortable' | 'wide';
+  showIllustrations: boolean;
+  readerTheme: 'default' | 'paper' | 'sepia' | 'night';
 }
 
 const defaultSettings: ReaderSettings = {
@@ -22,6 +27,11 @@ const defaultSettings: ReaderSettings = {
   textColor: '#4b2924',
   backgroundColor: '#f0c8d5',
   autoSave: true,
+  fontWeight: 400,
+  firstLineIndent: true,
+  pageMargin: 'comfortable',
+  showIllustrations: true,
+  readerTheme: 'default',
 };
 
 interface SettingsContextType {

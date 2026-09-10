@@ -8,41 +8,55 @@ function parseHtml(text: string): Document {
   return new DOMParser().parseFromString(text, 'text/html');
 }
 
+function archivePath(base: string, href: string): string {
+  const cleanHref = href.split('#')[0].split('?')[0];
+  const parts = `${base}${decodeURIComponent(cleanHref)}`.split('/');
+  const result: string[] = [];
+  for (const part of parts) {
+    if (!part || part === '.') continue;
+    if (part === '..') result.pop();
+    else result.push(part);
+  }
+  return result.join('/');
+}
+
+function findZipFile(zip: JSZip, path: string): JSZip.JSZipObject | undefined {
+  const candidates = [path, decodeURIComponent(path), encodeURI(path)];
+  for (const candidate of candidates) {
+    const file = zip.file(candidate);
+    if (file) return file;
+  }
+  return undefined;
+}
+
+function normalizeText(value: string): string {
+  return value
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    // Some EPUB converters lose the space after sentence punctuation.
+    .replace(/([.!?])(?=[A-ZА-ЯЁ«“])/g, '$1 ')
+    .trim();
+}
+
 function extractTextFromHtml(htmlText: string): string[] {
   const doc = parseHtml(htmlText);
   const paragraphs: string[] = [];
+  doc.querySelectorAll('script, style, head, nav, header, footer').forEach(el => el.remove());
 
-  // Remove script, style, head
-  doc.querySelectorAll('script, style, head').forEach(el => el.remove());
+  const add = (value: string | null | undefined) => {
+    const text = normalizeText(value || '');
+    if (text && text.length > 15 && !paragraphs.includes(text)) paragraphs.push(text);
+  };
 
-  // Try p tags first
-  const pTags = doc.querySelectorAll('p');
-  if (pTags.length > 0) {
-    pTags.forEach(p => {
-      const text = p.textContent?.replace(/\s+/g, ' ').trim();
-      if (text && text.length > 15) paragraphs.push(text);
-    });
-  }
-
-  // Fallback: block-level elements
+  doc.querySelectorAll('p').forEach(p => add(p.textContent));
   if (paragraphs.length === 0) {
-    doc.querySelectorAll('div, section, article').forEach(el => {
-      if (el.children.length === 0 || !el.querySelector('div, section')) {
-        const text = el.textContent?.replace(/\s+/g, ' ').trim();
-        if (text && text.length > 15) paragraphs.push(text);
-      }
+    doc.querySelectorAll('div, section, article, blockquote').forEach(el => {
+      if (el.children.length === 0 || !el.querySelector('div, section, article')) add(el.textContent);
     });
   }
-
-  // Last resort: body text split by double newlines
   if (paragraphs.length === 0) {
-    const body = doc.body?.textContent || '';
-    body.split(/\n{2,}/).forEach(chunk => {
-      const text = chunk.replace(/\s+/g, ' ').trim();
-      if (text.length > 15) paragraphs.push(text);
-    });
+    (doc.body?.textContent || '').split(/\n{2,}/).forEach(chunk => add(chunk));
   }
-
   return paragraphs;
 }
 
@@ -55,105 +69,142 @@ async function fileToBase64(blob: Blob): Promise<string> {
   });
 }
 
+type ManifestItem = { id: string; href: string; mediaType: string; properties: string };
+
+async function imageDataUrl(zip: JSZip, item: ManifestItem): Promise<string | undefined> {
+  const file = findZipFile(zip, item.href);
+  if (!file) return undefined;
+  const bytes = await file.async('uint8array');
+  return fileToBase64(new Blob([bytes.buffer as ArrayBuffer], { type: item.mediaType || 'image/jpeg' }));
+}
+
+async function findImageInCoverPage(zip: JSZip, page: ManifestItem, manifest: ManifestItem[]): Promise<string | undefined> {
+  const file = findZipFile(zip, page.href);
+  if (!file) return undefined;
+  const doc = parseHtml(await file.async('text'));
+  const source = doc.querySelector('img')?.getAttribute('src') || doc.querySelector('image')?.getAttribute('href');
+  if (!source) return undefined;
+  const imageHref = archivePath(page.href.slice(0, page.href.lastIndexOf('/') + 1), source);
+  const imageItem = manifest.find(item => item.href === imageHref || decodeURIComponent(item.href) === imageHref);
+  if (!imageItem) return undefined;
+  return imageDataUrl(zip, imageItem);
+}
+
+async function extractImagesFromHtml(zip: JSZip, page: ManifestItem, manifest: ManifestItem[]): Promise<string[]> {
+  const file = findZipFile(zip, page.href);
+  if (!file) return [];
+  const doc = parseHtml(await file.async('text'));
+  const imageUrls: string[] = [];
+  for (const node of Array.from(doc.querySelectorAll('img'))) {
+    const source = node.getAttribute('src');
+    if (!source) continue;
+    const imageHref = archivePath(page.href.slice(0, page.href.lastIndexOf('/') + 1), source);
+    const imageItem = manifest.find(item => item.href === imageHref || decodeURIComponent(item.href) === imageHref);
+    if (!imageItem?.mediaType.startsWith('image/')) continue;
+    const dataUrl = await imageDataUrl(zip, imageItem);
+    if (dataUrl) imageUrls.push(dataUrl);
+  }
+  return imageUrls;
+}
+
 export async function parseEpub(file: File): Promise<{
   title: string;
   author: string;
   coverUrl?: string;
-  chapters: { title: string; paragraphs: string[] }[];
+  chapters: { title: string; paragraphs: string[]; images?: string[] }[];
 }> {
-  const arrayBuffer = await file.arrayBuffer();
-  const zip = await JSZip.loadAsync(arrayBuffer);
-
-  // 1. Read container.xml → find OPF path
-  const containerXml = await zip.file('META-INF/container.xml')?.async('text');
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const containerXml = await findZipFile(zip, 'META-INF/container.xml')?.async('text');
   if (!containerXml) throw new Error('Not a valid EPUB: missing container.xml');
-
   const containerDoc = parseXml(containerXml);
   const opfPath = containerDoc.querySelector('rootfile')?.getAttribute('full-path');
   if (!opfPath) throw new Error('Cannot find OPF path in container.xml');
 
-  const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
-
-  // 2. Read OPF
-  const opfText = await zip.file(opfPath)?.async('text');
+  const opfFile = findZipFile(zip, opfPath);
+  const opfText = await opfFile?.async('text');
   if (!opfText) throw new Error('Cannot read OPF file');
   const opfDoc = parseXml(opfText);
+  const opfDir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
 
-  // 3. Metadata
-  const title = opfDoc.querySelector('metadata > *|title, metadata > title')?.textContent?.trim() || file.name.replace(/\.epub$/i, '');
-  const author = opfDoc.querySelector('metadata > *|creator, metadata > creator')?.textContent?.trim() || 'Unknown Author';
+  const title = opfDoc.querySelector('metadata > *|title, metadata > title')?.textContent?.trim()
+    || file.name.replace(/\.epub$/i, '');
+  const author = opfDoc.querySelector('metadata > *|creator, metadata > creator')?.textContent?.trim()
+    || 'Unknown Author';
 
-  // 4. Manifest: id → href map
-  const manifest: Record<string, { href: string; mediaType: string }> = {};
-  opfDoc.querySelectorAll('manifest item').forEach(item => {
-    const id = item.getAttribute('id');
-    const href = item.getAttribute('href');
-    const mediaType = item.getAttribute('media-type') || '';
-    if (id && href) manifest[id] = { href: opfDir + href, mediaType };
+  const manifest: ManifestItem[] = [];
+  opfDoc.querySelectorAll('manifest item').forEach(node => {
+    const id = node.getAttribute('id');
+    const href = node.getAttribute('href');
+    if (id && href) {
+      manifest.push({
+        id,
+        href: archivePath(opfDir, href),
+        mediaType: node.getAttribute('media-type') || '',
+        properties: node.getAttribute('properties') || '',
+      });
+    }
   });
 
-  // 5. Cover image
   let coverUrl: string | undefined;
   try {
-    // Try meta cover id
-    const coverId = opfDoc.querySelector('meta[name="cover"]')?.getAttribute('content');
-    const coverHref = coverId
-      ? manifest[coverId]?.href
-      : Object.values(manifest).find(m => m.mediaType.startsWith('image/') && /cover/i.test(m.href))?.href;
+    const coverImage = manifest.find(item => item.properties.split(/\s+/).includes('cover-image'));
+    const legacyCoverId = Array.from(opfDoc.querySelectorAll('meta')).find(node => (node.getAttribute('name') || '').toLowerCase() === 'cover')?.getAttribute('content');
+    const legacyCover = legacyCoverId ? manifest.find(item => item.id === legacyCoverId) : undefined;
+    const guideHref = Array.from(opfDoc.querySelectorAll('guide reference')).find(node => (node.getAttribute('type') || '').toLowerCase() === 'cover')?.getAttribute('href');
+    const guideItem = guideHref
+      ? manifest.find(item => item.href === archivePath(opfDir, guideHref))
+      : undefined;
+    const namedCover = manifest.find(item => item.mediaType.startsWith('image/') && /(^|\/)(frontcover|cover-image|cover)([-_.]|\/|$)/i.test(item.href));
 
-    if (coverHref) {
-      const coverFile = zip.file(coverHref) || zip.file(decodeURIComponent(coverHref));
-      if (coverFile) {
-        const blob = await coverFile.async('blob');
-        coverUrl = await fileToBase64(blob);
+    for (const candidate of [coverImage, legacyCover, namedCover]) {
+      if (candidate && candidate.mediaType.startsWith('image/')) {
+        coverUrl = await imageDataUrl(zip, candidate);
+        if (coverUrl) break;
       }
     }
+    if (!coverUrl && guideItem) {
+      coverUrl = guideItem.mediaType.startsWith('image/')
+        ? await imageDataUrl(zip, guideItem)
+        : await findImageInCoverPage(zip, guideItem, manifest);
+    }
+    if (!coverUrl) {
+      const firstImage = manifest.find(item => item.mediaType.startsWith('image/'));
+      if (firstImage) coverUrl = await imageDataUrl(zip, firstImage);
+    }
   } catch {
-    // no cover
+    // A missing or malformed cover must not prevent opening the book.
   }
 
-  // 6. Spine → ordered list of manifest ids
-  const spineIds: string[] = [];
-  opfDoc.querySelectorAll('spine itemref').forEach(ref => {
-    const id = ref.getAttribute('idref');
-    if (id) spineIds.push(id);
-  });
-
-  // 7. Extract chapters from spine items
-  const chapters: { title: string; paragraphs: string[] }[] = [];
+  const spineIds = Array.from(opfDoc.querySelectorAll('spine itemref'))
+    .map(node => node.getAttribute('idref'))
+    .filter((id): id is string => Boolean(id));
+  const chapters: { title: string; paragraphs: string[]; images?: string[] }[] = [];
   let chapterNum = 0;
 
   for (const id of spineIds) {
-    const item = manifest[id];
-    if (!item) continue;
-    if (!item.mediaType.includes('html') && !item.href.match(/\.(html|xhtml|htm)$/i)) continue;
-
+    const item = manifest.find(entry => entry.id === id);
+    if (!item || (!item.mediaType.includes('html') && !/\.(html?|xhtml)$/i.test(item.href))) continue;
     try {
-      const htmlText = await (zip.file(item.href) || zip.file(decodeURIComponent(item.href)))?.async('text');
+      const htmlFile = findZipFile(zip, item.href);
+      const htmlText = await htmlFile?.async('text');
       if (!htmlText) continue;
-
       const paragraphs = extractTextFromHtml(htmlText);
-      if (paragraphs.length === 0) continue;
-
+      if (!paragraphs.length) continue;
+      const images = await extractImagesFromHtml(zip, item, manifest);
       chapterNum++;
-      const doc = parseHtml(htmlText);
-      const heading = doc.querySelector('h1, h2, h3')?.textContent?.trim();
-      const chapterTitle = heading || `Chapter ${chapterNum}`;
-
-      // Merge very short chapters into the previous one (e.g. cover pages)
+      const heading = parseHtml(htmlText).querySelector('h1, h2, h3')?.textContent?.trim();
+      const chapterTitle = normalizeText(heading || `Chapter ${chapterNum}`);
       if (paragraphs.length < 3 && chapters.length > 0) {
         chapters[chapters.length - 1].paragraphs.push(...paragraphs);
+        chapters[chapters.length - 1].images = [...(chapters[chapters.length - 1].images || []), ...images];
       } else {
-        chapters.push({ title: chapterTitle, paragraphs });
+        chapters.push({ title: chapterTitle, paragraphs, images });
       }
     } catch {
-      // skip broken item
+      // Skip a broken spine item and continue with the readable chapters.
     }
   }
 
-  if (chapters.length === 0) {
-    throw new Error('Could not extract any text from this EPUB file.');
-  }
-
+  if (!chapters.length) throw new Error('Could not extract any text from this EPUB file.');
   return { title, author, coverUrl, chapters };
 }

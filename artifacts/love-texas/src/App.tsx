@@ -10,7 +10,6 @@ import { ReaderSettingsProvider } from '@/contexts/ReaderSettingsContext';
 import { LibraryPage } from '@/pages/LibraryPage';
 import { ReaderPage } from '@/pages/ReaderPage';
 import { DictionaryPage } from '@/pages/DictionaryPage';
-import { LearnPage } from '@/pages/LearnPage';
 import { StatsPage } from '@/pages/StatsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 
@@ -23,7 +22,6 @@ function Router() {
         <Route path="/" component={LibraryPage} />
         <Route path="/reader/:id" component={ReaderPage} />
         <Route path="/dictionary" component={DictionaryPage} />
-        <Route path="/learn" component={LearnPage} />
         <Route path="/stats" component={StatsPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route component={NotFound} />

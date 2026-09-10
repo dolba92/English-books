@@ -1,6 +1,6 @@
 import { Book } from '@/lib/storage';
-import { Link } from 'wouter';
-import { Play, Trash2, FileText, ArrowUpRight } from 'lucide-react';
+import { Link, useLocation } from 'wouter';
+import { Play, Trash2, FileText, ArrowUpRight, BookOpen } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface BookCardProps {
@@ -10,6 +10,7 @@ interface BookCardProps {
 }
 
 export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
+  const [, navigate] = useLocation();
   const levelColors: Record<string, string> = {
     A1: 'bg-secondary text-secondary-foreground',
     A2: 'bg-accent/50 text-foreground',
@@ -19,8 +20,6 @@ export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
   };
 
   const badgeColor = levelColors[book.level] || levelColors['B1'];
-  const titleInitial = book.title.charAt(0).toUpperCase();
-
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -33,8 +32,12 @@ export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
     <motion.div
       whileHover={{ y: -4 }}
       transition={{ duration: 0.2 }}
-      className="group flex w-full min-w-0 flex-col bg-card/95 rounded-[14px] overflow-hidden shadow-[0_10px_24px_rgba(57,35,26,.14)] hover:shadow-[0_16px_32px_rgba(57,35,26,.22)] border border-card-border transition-shadow"
+      className="group flex w-full min-w-0 flex-col bg-card/90 rounded-[16px] overflow-hidden shadow-[0_8px_24px_rgba(57,35,26,.11)] hover:shadow-[0_14px_32px_rgba(57,35,26,.18)] border border-white/65 transition-shadow cursor-pointer"
       data-testid={`card-book-${book.id}`}
+      role="link"
+      tabIndex={0}
+      onClick={() => navigate(`/reader/${book.id}`)}
+      onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(`/reader/${book.id}`); } }}
     >
       {/* Cover */}
         <div className="relative w-full overflow-hidden bg-muted" style={{ paddingBottom: '120%' }}>
@@ -46,9 +49,10 @@ export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-[radial-gradient(circle_at_28%_18%,hsl(var(--accent)/.5),transparent_30%),linear-gradient(145deg,hsl(var(--secondary)),hsl(var(--primary)/.2))] p-4 text-center">
-              <span className="font-editorial text-7xl font-semibold text-foreground/65 leading-none">{titleInitial}</span>
-              <span className="text-[11px] font-medium text-foreground/65 mt-3 line-clamp-2">{book.author}</span>
+             <div className="w-full h-full flex flex-col items-center justify-center bg-[radial-gradient(circle_at_28%_18%,hsl(var(--accent)/.5),transparent_30%),linear-gradient(145deg,hsl(var(--secondary)),hsl(var(--primary)/.2))] p-5 text-center">
+               <BookOpen size={34} className="text-primary/75 mb-4" />
+               <span className="font-editorial text-lg font-semibold text-foreground/80 leading-tight line-clamp-3">{book.title}</span>
+               <span className="text-[11px] font-medium text-foreground/60 mt-3 line-clamp-2">{book.author}</span>
             </div>
           )}
 
@@ -60,7 +64,7 @@ export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
           </div>
 
           {/* Hover overlay */}
-          <div className="absolute inset-0 bg-foreground/35 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center justify-center gap-2">
+          <div className="absolute inset-0 bg-foreground/35 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center justify-center gap-2" onClick={event => event.stopPropagation()}>
             <Link
               href={`/reader/${book.id}`}
               data-testid={`btn-read-${book.id}`}
@@ -98,7 +102,7 @@ export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
             />
           </div>
         </div>
-        <Link href={`/reader/${book.id}`} data-testid={`link-open-book-${book.id}`} className="mt-2 text-xs font-semibold text-primary flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+        <Link onClick={event => event.stopPropagation()} href={`/reader/${book.id}`} data-testid={`link-open-book-${book.id}`} className="mt-2 text-xs font-semibold text-primary flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
           {progress > 0 ? 'Продолжить чтение' : 'Открыть книгу'} <ArrowUpRight size={13} />
         </Link>
       </div>

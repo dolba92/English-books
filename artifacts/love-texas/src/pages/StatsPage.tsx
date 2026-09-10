@@ -1,131 +1,75 @@
-import React, { useEffect, useState } from 'react';
-import { getStats, AppStats, getAllBooks, getDictionaryWords, getAllProgress, BookProgress } from '@/lib/storage';
-import { motion } from 'framer-motion';
-import { BookOpen, Brain, BookMarked, Award, FileText } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { useEffect, useState } from 'react';
+import { BarChart3, BookOpen, Clock3, LibraryBig, Sparkles } from 'lucide-react';
+import { Book, BookProgress, getAllBooks, getAllProgress, getDictionaryWords } from '@/lib/storage';
 
 export function StatsPage() {
-  const [stats, setStats] = useState<AppStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [booksFinished, setBooksFinished] = useState(0);
-  const [totalPagesTurned, setTotalPagesTurned] = useState(0);
-  const [wordsCount, setWordsCount] = useState(0);
+  const [books, setBooks] = useState<Book[]>([]);
+  const [progress, setProgress] = useState<BookProgress[]>([]);
+  const [wordCount, setWordCount] = useState(0);
 
   useEffect(() => {
-    const load = async () => {
-      const s = await getStats();
-      const books = await getAllBooks();
-      const progressList: BookProgress[] = await getAllProgress();
-      const w = await getDictionaryWords();
-
-      // Build a map bookId → progress for quick lookup
-      const progressMap = new Map<number, BookProgress>();
-      for (const p of progressList) progressMap.set(p.bookId, p);
-
-      // Books "read" = percentComplete >= 90
-      const finished = books.filter(b => {
-        const p = progressMap.get(b.id!);
-        return p && p.percentComplete >= 90;
-      }).length;
-
-      // Total pages turned = sum of currentPage across all progress records
-      const pages = progressList.reduce((sum, p) => sum + (p.currentPage ?? 0), 0);
-
-      setStats(s);
-      setBooksFinished(finished);
-      setTotalPagesTurned(pages);
-      setWordsCount(w.length);
-      setLoading(false);
-    };
-    load();
+    Promise.all([getAllBooks(), getAllProgress(), getDictionaryWords()]).then(([loadedBooks, loadedProgress, words]) => {
+      setBooks(loadedBooks);
+      setProgress(loadedProgress);
+      setWordCount(words.length);
+    });
   }, []);
 
-  if (loading || !stats) {
-    return <div data-testid="status-stats-loading" className="p-8 sm:p-12 max-w-6xl mx-auto space-y-5"><div className="h-16 w-64 bg-muted rounded-2xl animate-pulse" /><div className="grid grid-cols-2 md:grid-cols-4 gap-4">{[1,2,3,4].map(i => <div key={i} className="h-32 bg-muted rounded-2xl animate-pulse" />)}</div><div className="h-72 bg-muted rounded-2xl animate-pulse" /></div>;
-  }
-
-  const daysActive = Math.max(1, Math.ceil((Date.now() - stats.firstUsed) / (1000 * 60 * 60 * 24)));
-
-  const dayWord = (n: number) => {
-    const mod10 = n % 10;
-    const mod100 = n % 100;
-    if (mod10 === 1 && mod100 !== 11) return 'день';
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'дня';
-    return 'дней';
-  };
-
-  const cards = [
-     { label: 'Книг прочитано',      value: booksFinished,              icon: BookOpen,   color: 'text-primary',   bg: 'bg-primary/10' },
-     { label: 'Страниц перевёрнуто', value: totalPagesTurned,           icon: FileText,   color: 'text-secondary-foreground', bg: 'bg-secondary/60' },
-     { label: 'Слов в словаре',      value: wordsCount,                 icon: BookMarked, color: 'text-primary',   bg: 'bg-accent/45' },
-     { label: 'Тренировок',          value: stats.totalTrainingsDone,   icon: Brain,      color: 'text-destructive', bg: 'bg-destructive/10' },
-  ];
-
-  const chartData = [
-    { name: 'Пн', words: Math.max(0, wordsCount - 15) },
-    { name: 'Вт', words: Math.max(0, wordsCount - 10) },
-    { name: 'Ср', words: Math.max(0, wordsCount - 8) },
-    { name: 'Чт', words: Math.max(0, wordsCount - 5) },
-    { name: 'Пт', words: Math.max(0, wordsCount - 2) },
-    { name: 'Сб', words: wordsCount },
-    { name: 'Вс', words: wordsCount + 1 },
-  ];
+  const progressByBook = new Map(progress.map(item => [item.bookId, item]));
+  const pagesRead = progress.reduce((sum, item) => sum + (item.totalPagesRead || item.currentPage || 0), 0);
+  const completed = progress.filter(item => item.percentComplete >= 99).length;
+  const active = progress.filter(item => item.percentComplete > 0 && item.percentComplete < 99).length;
+  const readingDays = new Set(progress.filter(item => item.lastReadAt).map(item => new Date(item.lastReadAt).toDateString())).size;
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-6 md:p-10 max-w-6xl mx-auto">
-       <div className="mb-10">
-         <div className="text-primary text-xs font-bold uppercase tracking-[.2em] mb-3">Тихий, но заметный рост</div>
-         <h1 data-testid="text-stats-title" className="font-editorial text-5xl font-semibold tracking-[-.04em] text-foreground">Ваш прогресс</h1>
-         <p data-testid="text-active-days" className="text-muted-foreground mt-2">Изучаю английский уже {daysActive} {dayWord(daysActive)}</p>
+    <div className="page-container max-w-5xl">
+      <header className="mb-8">
+        <p className="eyebrow">English Books • Reading Club</p>
+        <h1 className="font-editorial text-4xl font-bold text-foreground">Прогресс</h1>
+        <p className="mt-2 text-muted-foreground">Только реальные данные чтения в этом браузере.</p>
+      </header>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+        <div className="metric-card"><BookOpen size={18} /><strong>{books.length}</strong><span>книг в библиотеке</span></div>
+        <div className="metric-card"><LibraryBig size={18} /><strong>{active}</strong><span>книг в процессе</span></div>
+        <div className="metric-card"><BarChart3 size={18} /><strong>{pagesRead}</strong><span>прочитано страниц</span></div>
+        <div className="metric-card"><Sparkles size={18} /><strong>{wordCount}</strong><span>сохранённых слов</span></div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-        {cards.map((card, i) => (
-          <motion.div
-            key={card.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-            className="bg-card border border-border p-5 rounded-3xl flex flex-col items-center text-center shadow-sm"
-          >
-            <div className={`w-12 h-12 rounded-full ${card.bg} ${card.color} flex items-center justify-center mb-3`}>
-              <card.icon size={24} />
-            </div>
-             <div data-testid={`text-stat-${i}`} className="text-3xl font-bold text-foreground mb-1">{card.value}</div>
-            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{card.label}</div>
-          </motion.div>
-        ))}
-      </div>
-
-       <div className="bg-card/85 border border-card-border rounded-3xl p-6 shadow-[0_10px_28px_rgba(57,35,26,.06)]">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold">Рост словарного запаса</h2>
-          <div className="flex items-center gap-2 text-sm text-primary font-medium">
-            <Award size={16} /> Стабильно
+      <section className="settings-section">
+        <div className="settings-section-title">
+          <Clock3 size={18} className="text-primary" />
+          <div>
+            <h2>Чтение</h2>
+            <p>{readingDays ? `${readingDays} ${readingDays === 1 ? 'день' : 'дней'} с активным чтением` : 'Начните читать, чтобы здесь появился прогресс.'}</p>
           </div>
         </div>
-
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorWords" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-              <Tooltip
-                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                itemStyle={{ color: 'hsl(var(--primary))', fontWeight: 'bold' }}
-                formatter={(v: any) => [v, 'слов']}
-              />
-              <Area type="monotone" dataKey="words" stroke="hsl(var(--primary))" strokeWidth={3} fillOpacity={1} fill="url(#colorWords)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    </motion.div>
+        {books.length === 0 ? (
+          <div className="empty-state">В библиотеке пока нет книг.</div>
+        ) : (
+          <div className="space-y-3">
+            {books.map(book => {
+              const item = progressByBook.get(book.id!);
+              const percent = Math.round(item?.percentComplete || 0);
+              return (
+                <div key={book.id} className="progress-row">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold truncate">{book.title}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">{percent}%</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted overflow-hidden mt-2">
+                      <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${percent}%` }} />
+                    </div>
+                  </div>
+                  <span className="text-xs text-muted-foreground shrink-0">{item ? `${item.currentPage + 1} / ${book.totalPages}` : 'Не начата'}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {completed > 0 && <p className="text-sm text-muted-foreground mt-5">Завершено книг: {completed}</p>}
+      </section>
+    </div>
   );
 }

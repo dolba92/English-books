@@ -3,11 +3,11 @@ import { useParams, Link } from 'wouter';
 import { Book, getBook, getProgress, saveProgress, addWordToDictionary } from '@/lib/storage';
 import { paginateBook } from '@/lib/paginator';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
-import { getFontCss } from '@/lib/fonts';
+import { FONTS, getFontCss } from '@/lib/fonts';
 import { lookupWord, translateSentence, WordInfo, RuGroup } from '@/lib/wordlookup';
 import {
-  ArrowLeft, ChevronLeft, ChevronRight, Settings, X, Plus,
-  Loader2, List, BookOpen, Languages, Microscope, Volume2
+  ArrowLeft, ChevronLeft, ChevronRight, X, Plus,
+  Loader2, List, BookOpen, Languages, Microscope, Volume2, Maximize2, Minimize2, Type
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { speak } from '@/lib/speech';
@@ -87,7 +87,15 @@ function splitSentences(text: string): string[] {
   return results.length > 0 ? results : [text];
 }
 
-interface PageData { title: string; paragraphs: string[]; isChapterStart: boolean; }
+function normalizeReadingText(text: string): string {
+  return text
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/([.!?])(?=[A-ZА-ЯЁ«“])/g, '$1 ')
+    .replace(/([,;:])(?=[A-Za-zА-Яа-яЁё])/g, '$1 ');
+}
+
+interface PageData { title: string; paragraphs: string[]; images?: string[]; isChapterStart: boolean; }
 interface TocEntry { title: string; pageIdx: number; }
 
 // ── Word Tooltip ─────────────────────────────────────────────────────────────
@@ -134,6 +142,8 @@ function WordTooltip({
 
   // Clamp tooltip so it doesn't go off-screen left/right
   const safeX = Math.max(148, Math.min(window.innerWidth - 148, x));
+  const opensDown = y < 210;
+  const safeY = opensDown ? Math.min(window.innerHeight - 18, y + 34) : Math.max(18, y);
 
   return (
     <motion.div
@@ -142,7 +152,7 @@ function WordTooltip({
       exit={{ opacity: 0, y: 6, scale: 0.96 }}
       transition={{ duration: 0.12 }}
       className="fixed z-50 pointer-events-auto"
-      style={{ left: safeX, top: y, transform: 'translate(-50%, -100%)' }}
+       style={{ left: safeX, top: safeY, transform: opensDown ? 'translate(-50%, 0)' : 'translate(-50%, -100%)' }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
@@ -222,6 +232,88 @@ function WordTooltip({
   );
 }
 
+function ReaderSettingsPanel({ onClose }: { onClose: () => void }) {
+  const { settings, updateSettings } = useReaderSettings();
+  const set = (patch: Parameters<typeof updateSettings>[0]) => updateSettings(patch);
+  const themes = [
+    { value: 'default' as const, label: 'Текущая' },
+    { value: 'paper' as const, label: 'Бумага' },
+    { value: 'sepia' as const, label: 'Сепия' },
+    { value: 'night' as const, label: 'Ночь' },
+  ];
+
+  return (
+    <motion.aside
+      key="reader-settings"
+      initial={{ x: 380, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: 380, opacity: 0 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+      className="reader-settings fixed right-0 top-14 bottom-0 w-[min(390px,100vw)] bg-card border-l border-border flex flex-col z-40 shadow-2xl"
+    >
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+        <div className="flex items-center gap-2"><Type size={17} className="text-primary" /><h2 className="font-semibold">Настройки чтения</h2></div>
+        <button type="button" onClick={onClose} aria-label="Закрыть настройки чтения" className="p-1.5 rounded-full hover:bg-muted text-muted-foreground"><X size={17} /></button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <label className="reader-setting-control">
+          <span>Шрифт</span>
+          <select value={settings.fontFamily} onChange={event => set({ fontFamily: event.target.value })} className="reader-select">
+            {FONTS.map(font => <option key={font.value} value={font.value}>{font.label}</option>)}
+          </select>
+        </label>
+        <label className="reader-setting-control">
+          <span className="flex items-center justify-between">Размер <b>{settings.fontSize}px</b></span>
+          <input type="range" min={13} max={28} step={1} value={settings.fontSize} onChange={event => set({ fontSize: Number(event.target.value) })} />
+        </label>
+        <div className="reader-setting-control">
+          <span>Насыщенность</span>
+          <div className="grid grid-cols-3 gap-2">
+            {[400, 500, 600].map(weight => <button type="button" key={weight} onClick={() => set({ fontWeight: weight as 400 | 500 | 600 })} className={`reader-choice ${settings.fontWeight === weight ? 'reader-choice-active' : ''}`} style={{ fontWeight: weight }}>{weight === 400 ? 'Обычная' : weight === 500 ? 'Средняя' : 'Плотная'}</button>)}
+          </div>
+        </div>
+        <label className="reader-setting-control">
+          <span className="flex items-center justify-between">Интервал строк <b>{settings.lineHeight.toFixed(1)}</b></span>
+          <input type="range" min={1.3} max={2.2} step={0.1} value={settings.lineHeight} onChange={event => set({ lineHeight: Number(event.target.value) })} />
+        </label>
+        <div className="reader-setting-control">
+          <span>Выравнивание</span>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => set({ textAlign: 'left' })} className={`reader-choice ${settings.textAlign === 'left' ? 'reader-choice-active' : ''}`}>По левому краю</button>
+            <button type="button" onClick={() => set({ textAlign: 'justify' })} className={`reader-choice ${settings.textAlign === 'justify' ? 'reader-choice-active' : ''}`}>По ширине</button>
+          </div>
+        </div>
+        <div className="reader-setting-control">
+          <span>Ширина текста</span>
+          <div className="grid grid-cols-3 gap-2">
+            {(['narrow', 'medium', 'wide'] as const).map(width => <button type="button" key={width} onClick={() => set({ pageWidth: width })} className={`reader-choice ${settings.pageWidth === width ? 'reader-choice-active' : ''}`}>{width === 'narrow' ? 'Узкая' : width === 'medium' ? 'Средняя' : 'Широкая'}</button>)}
+          </div>
+        </div>
+        <div className="reader-setting-control">
+          <span>Поля страницы</span>
+          <div className="grid grid-cols-3 gap-2">
+            {(['compact', 'comfortable', 'wide'] as const).map(margin => <button type="button" key={margin} onClick={() => set({ pageMargin: margin })} className={`reader-choice ${settings.pageMargin === margin ? 'reader-choice-active' : ''}`}>{margin === 'compact' ? 'Малые' : margin === 'comfortable' ? 'Средние' : 'Большие'}</button>)}
+          </div>
+        </div>
+        <label className="flex items-center justify-between gap-3 text-sm">
+          <span><b className="block">Абзацный отступ</b><small className="text-muted-foreground">Классическая книжная верстка</small></span>
+          <input type="checkbox" checked={settings.firstLineIndent} onChange={event => set({ firstLineIndent: event.target.checked })} className="accent-primary h-4 w-4" />
+        </label>
+        <label className="flex items-center justify-between gap-3 text-sm">
+          <span><b className="block">Иллюстрации</b><small className="text-muted-foreground">Показывать изображения книги</small></span>
+          <input type="checkbox" checked={settings.showIllustrations} onChange={event => set({ showIllustrations: event.target.checked })} className="accent-primary h-4 w-4" />
+        </label>
+        <div className="reader-setting-control">
+          <span>Тема Reader</span>
+          <div className="grid grid-cols-2 gap-2">
+            {themes.map(item => <button type="button" key={item.value} onClick={() => set({ readerTheme: item.value })} className={`reader-choice ${settings.readerTheme === item.value ? 'reader-choice-active' : ''}`}>{item.label}</button>)}
+          </div>
+        </div>
+      </div>
+    </motion.aside>
+  );
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 export function ReaderPage() {
   const params = useParams();
@@ -247,9 +339,15 @@ export function ReaderPage() {
   const [panelTab, setPanelTab] = useState<'translate' | 'grammar'>('translate');
 
   const [showToc, setShowToc] = useState(false);
+  const [showReaderSettings, setShowReaderSettings] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [immersiveFallback, setImmersiveFallback] = useState(false);
   const [showHint, setShowHint] = useState(() => !localStorage.getItem('reader-hint-dismissed'));
   const [jumpValue, setJumpValue] = useState('');
   const [editingPage, setEditingPage] = useState(false);
+  const readerRootRef = useRef<HTMLDivElement>(null);
+  const touchStartXRef = useRef<number | null>(null);
+  const readingAnchorRef = useRef<string | null>(null);
 
   const saveProgressRef = useRef(saveProgress);
   saveProgressRef.current = saveProgress;
@@ -259,6 +357,24 @@ export function ReaderPage() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen?.();
+      return;
+    }
+    if (readerRootRef.current?.requestFullscreen) {
+      await readerRootRef.current.requestFullscreen();
+    } else {
+      setImmersiveFallback(value => !value);
+    }
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -273,7 +389,7 @@ export function ReaderPage() {
         );
         const flat: PageData[] = [];
         paginatedChapters.forEach(ch => {
-          ch.pages.forEach((p, pi) => flat.push({ title: ch.title, paragraphs: p, isChapterStart: pi === 0 }));
+          ch.pages.forEach((p, pi) => flat.push({ title: ch.title, paragraphs: p, images: pi === 0 ? ch.images : undefined, isChapterStart: pi === 0 }));
         });
         setPages(flat);
         const prog = await getProgress(id);
@@ -285,10 +401,38 @@ export function ReaderPage() {
   }, [id]);
 
   useEffect(() => {
+    if (pages.length > 0) readingAnchorRef.current = pages[currentPageIdx]?.paragraphs[0] || null;
+  }, [pages, currentPageIdx]);
+
+  useEffect(() => {
+    if (!book || pages.length === 0) return;
+    const isMobileLayout = viewportWidth < 640;
+    const widthFactor = settings.pageWidth === 'narrow' ? 0.78 : settings.pageWidth === 'wide' ? 1.18 : 1;
+    const fontFactor = 17 / Math.max(settings.fontSize, 13);
+    const lineFactor = 1.65 / Math.max(settings.lineHeight, 1.3);
+    const { paginatedChapters } = paginateBook(
+      book.content,
+      Math.max(2, Math.round((isMobileLayout ? 4 : 6) * widthFactor * lineFactor)),
+      Math.round((isMobileLayout ? 1700 : 2300) * widthFactor * fontFactor * lineFactor),
+    );
+    const nextPages: PageData[] = [];
+    paginatedChapters.forEach(chapter => chapter.pages.forEach((paragraphs, pageIndex) => {
+      nextPages.push({ title: chapter.title, paragraphs, images: pageIndex === 0 ? chapter.images : undefined, isChapterStart: pageIndex === 0 });
+    }));
+    if (!nextPages.length) return;
+    const anchor = readingAnchorRef.current;
+    const nextIndex = anchor ? Math.max(0, nextPages.findIndex(candidate => candidate.paragraphs.includes(anchor))) : currentPageIdx;
+    setPages(nextPages);
+    setCurrentPageIdx(Math.min(nextIndex < 0 ? currentPageIdx : nextIndex, nextPages.length - 1));
+    // Deliberately reflow only when reader layout settings change; the anchor keeps the reader in the same passage.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book, viewportWidth, settings.fontSize, settings.lineHeight, settings.pageWidth]);
+
+  useEffect(() => {
     if (!book || pages.length === 0) return;
     const timer = setTimeout(() => {
       const pct = (currentPageIdx / (pages.length - 1 || 1)) * 100;
-      saveProgressRef.current({ bookId: id, currentChapterIndex: 0, currentPage: currentPageIdx, totalPagesRead: currentPageIdx, lastReadAt: Date.now(), percentComplete: pct });
+       saveProgressRef.current({ bookId: id, currentChapterIndex: 0, currentPage: currentPageIdx, totalPagesRead: currentPageIdx + 1, lastReadAt: Date.now(), percentComplete: pct });
     }, 1000);
     return () => clearTimeout(timer);
   }, [currentPageIdx, book, pages.length, id]);
@@ -349,6 +493,17 @@ export function ReaderPage() {
     hideTimeoutRef.current = setTimeout(() => setTooltip(null), 300);
   };
 
+  const handleWordClick = async (e: React.MouseEvent<HTMLSpanElement>, rawWord: string) => {
+    const word = rawWord.replace(/[^a-zA-Z'-]/g, '').toLowerCase().trim();
+    if (!word || word.length < 2) return;
+    clearTimeout(hoverTimeoutRef.current);
+    clearTimeout(hideTimeoutRef.current);
+    const rect = e.currentTarget.getBoundingClientRect();
+    setTooltip({ word, x: rect.left + rect.width / 2, y: rect.top - 8, info: null, loading: true });
+    const info = await lookupWord(word);
+    setTooltip(previous => previous?.word === word ? { ...previous, info, loading: false } : previous);
+  };
+
   const handleAddWord = async (word: string, translation: string, pos?: string) => {
     await addWordToDictionary(word, translation, undefined, pos);
     toast({ title: 'Добавлено в словарь', description: `"${word}" → ${translation}`, duration: 2000 });
@@ -397,11 +552,19 @@ export function ReaderPage() {
   const widthClass = settings.pageWidth === 'narrow' ? 'max-w-xl' : settings.pageWidth === 'wide' ? 'max-w-4xl' : 'max-w-2xl';
   const fontCss = getFontCss(settings.fontFamily);
   const isMobile = viewportWidth < 640;
-  const readerFontSize = isMobile ? Math.min(settings.fontSize, 16) : settings.fontSize;
-  const readerLineHeight = isMobile ? Math.min(settings.lineHeight, 1.5) : settings.lineHeight;
+  const readerFontSize = settings.fontSize;
+  const readerLineHeight = settings.lineHeight;
+  const readerThemeStyle: React.CSSProperties = settings.readerTheme === 'paper'
+    ? { backgroundColor: '#f4ead8' }
+    : settings.readerTheme === 'sepia'
+      ? { backgroundColor: '#ead9bd' }
+      : settings.readerTheme === 'night'
+        ? { backgroundColor: '#17151a', color: '#f5eee7' }
+        : (customBackgroundColor ? { backgroundColor: customBackgroundColor } : {});
+  const marginClass = settings.pageMargin === 'compact' ? 'px-4 sm:px-6 md:px-8' : settings.pageMargin === 'wide' ? 'px-7 sm:px-10 md:px-16' : 'px-5 sm:px-8 md:px-12';
 
   return (
-    <div className="min-h-0 h-[calc(100dvh-64px)] md:min-h-[100dvh] md:h-[100dvh] bg-background text-foreground flex flex-col selection:bg-primary/20 overflow-hidden" style={customBackgroundColor ? { backgroundColor: customBackgroundColor } : undefined}>
+    <div ref={readerRootRef} className={`reader-root ${immersiveFallback ? 'reader-immersive' : ''} min-h-0 h-[100dvh] bg-background text-foreground flex flex-col selection:bg-primary/20 overflow-hidden`} style={readerThemeStyle}>
       <header className="h-14 flex items-center justify-between px-4 border-b border-border/40 shrink-0 sticky top-0 bg-background/90 backdrop-blur-md z-20">
         <div className="flex items-center gap-2">
           <Link href="/" data-testid="link-reader-library" aria-label="Вернуться в библиотеку" className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-full hover:bg-muted">
@@ -413,7 +576,7 @@ export function ReaderPage() {
           </button>
           <div className="hidden md:block ml-1">
             <h1 className="font-bold text-sm leading-tight">{book.title}</h1>
-            <p className="text-xs text-muted-foreground">{book.author}</p>
+             <p className="text-xs text-muted-foreground">{page.title || book.author}</p>
           </div>
         </div>
         <div className="flex-1 max-w-md mx-8 hidden md:flex items-center gap-3">
@@ -422,12 +585,22 @@ export function ReaderPage() {
             <div className="h-full bg-primary transition-all duration-300" style={{ width: `${percent}%` }} />
           </div>
         </div>
-         <Link href="/settings" data-testid="link-reader-settings" aria-label="Настройки чтения" className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full">
-          <Settings size={20} />
-        </Link>
+         <div className="flex items-center gap-1">
+           <button type="button" data-testid="button-reader-settings" aria-label="Настройки чтения" onClick={() => setShowReaderSettings(value => !value)} className={`p-2 rounded-full ${showReaderSettings ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}>
+             <span className="text-[13px] font-bold leading-none">Aa</span>
+           </button>
+           <button type="button" data-testid="button-reader-fullscreen" aria-label={isFullscreen || immersiveFallback ? 'Выйти из полноэкранного режима' : 'Полноэкранный режим'} onClick={toggleFullscreen} className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full">
+             {isFullscreen || immersiveFallback ? <Minimize2 size={19} /> : <Maximize2 size={19} />}
+           </button>
+         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden relative">
+       <div className="flex flex-1 overflow-hidden relative" onTouchStart={event => { touchStartXRef.current = event.touches[0]?.clientX ?? null; }} onTouchEnd={event => {
+         if (touchStartXRef.current === null) return;
+         const delta = (event.changedTouches[0]?.clientX ?? 0) - touchStartXRef.current;
+         touchStartXRef.current = null;
+         if (Math.abs(delta) > 55) (delta < 0 ? handleNext : handlePrev)();
+       }}>
         {/* TOC */}
         <AnimatePresence>
           {showToc && (
@@ -465,7 +638,7 @@ export function ReaderPage() {
         </AnimatePresence>
 
         {/* Reader */}
-        <main className={`flex-1 relative flex items-center justify-center overflow-hidden transition-all duration-300 ${selectedSentence ? 'md:mr-[380px]' : ''} ${showToc ? 'md:ml-[280px]' : ''}`}>
+        <main className={`flex-1 relative flex items-center justify-center overflow-hidden transition-all duration-300 ${selectedSentence ? 'md:mr-[380px]' : ''} ${showReaderSettings ? 'md:mr-[390px]' : ''} ${showToc ? 'md:ml-[280px]' : ''}`}>
            <button data-testid="button-reader-prev" aria-label="Предыдущая страница" onClick={handlePrev} className="absolute left-0 top-0 bottom-0 w-[8%] md:w-14 hover:bg-foreground/[0.02] flex items-center justify-center transition-colors text-transparent hover:text-foreground/20 z-10">
             <ChevronLeft size={36} />
           </button>
@@ -473,7 +646,7 @@ export function ReaderPage() {
             <ChevronRight size={36} />
           </button>
 
-           <div className={`w-full ${widthClass} px-6 sm:px-8 md:px-12 py-5 sm:py-8 h-full overflow-hidden`}>
+           <div className={`w-full ${widthClass} ${marginClass} py-5 sm:py-8 h-full overflow-hidden`}>
             <AnimatePresence>
               {showHint && (
                 <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
@@ -490,15 +663,24 @@ export function ReaderPage() {
 
             <AnimatePresence mode="wait">
               <motion.div key={currentPageIdx} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.25 }}
-               style={{ fontSize: `${readerFontSize}px`, lineHeight: readerLineHeight, fontFamily: fontCss }}>
+               style={{ fontSize: `${readerFontSize}px`, lineHeight: readerLineHeight, fontFamily: fontCss, fontWeight: settings.fontWeight }}>
+                {settings.showIllustrations && page.images?.map((image, imageIndex) => (
+                  <img
+                    key={`${currentPageIdx}-illustration-${imageIndex}`}
+                    src={image}
+                    alt=""
+                    className="reader-illustration"
+                    loading="lazy"
+                  />
+                ))}
                 {page.isChapterStart && page.title && (
                   <h2 className="font-serif text-center font-bold mb-6 text-primary/60 text-[1.1em]">{page.title}</h2>
                 )}
                 <div className="flex flex-col" style={{ gap: `${settings.paragraphSpacing}em` }}>
                   {page.paragraphs.map((para, pi) => {
-                    const sentences = splitSentences(para);
+                     const sentences = splitSentences(normalizeReadingText(para));
                     return (
-                      <p key={pi} className={`text-foreground/90 ${settings.textAlign === 'justify' ? 'text-justify' : 'text-left'}`} style={{ color: settings.textColor }}>
+                       <p key={pi} className={`text-foreground/90 ${settings.textAlign === 'justify' ? 'text-justify' : 'text-left'}`} style={{ color: settings.textColor, textIndent: settings.firstLineIndent ? '1.5em' : undefined }}>
                         {sentences.map((sentence, si) => {
                           const punctMatch = sentence.match(/^([\s\S]*?)([.!?…]+["'»]?\s*)$/);
                           const body = punctMatch ? punctMatch[1] : sentence;
@@ -515,7 +697,7 @@ export function ReaderPage() {
                                     className="hover:bg-primary/20 rounded px-[1px] transition-colors cursor-default"
                                     onMouseEnter={e => handleWordMouseEnter(e, clean)}
                                     onMouseLeave={handleWordMouseLeave}
-                                    onClick={e => e.stopPropagation()}>
+                                     onClick={e => { e.stopPropagation(); handleWordClick(e, clean); }}>
                                     {token}
                                   </span>
                                 );
@@ -538,12 +720,16 @@ export function ReaderPage() {
           </div>
         </main>
 
+        <AnimatePresence>
+          {showReaderSettings && <ReaderSettingsPanel onClose={() => setShowReaderSettings(false)} />}
+        </AnimatePresence>
+
         {/* Sentence / Grammar panel */}
         <AnimatePresence>
           {selectedSentence && (
             <motion.aside key="panel" initial={{ x: 380 }} animate={{ x: 0 }} exit={{ x: 380 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="fixed right-0 top-14 bottom-0 w-[380px] bg-card border-l border-border flex flex-col z-30 shadow-xl">
+               className="sentence-panel fixed right-0 top-14 bottom-0 w-[380px] max-w-full bg-card border-l border-border flex flex-col z-30 shadow-xl">
               <div className="flex items-center justify-between px-4 pt-4 pb-0 shrink-0">
                 <div className="flex gap-1 bg-muted p-1 rounded-xl">
                    <button data-testid="button-sentence-translation-tab" onClick={() => setPanelTab('translate')}

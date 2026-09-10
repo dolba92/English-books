@@ -3,6 +3,7 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 export interface BookChapter {
   title: string;
   paragraphs: string[];
+  images?: string[];
 }
 
 export interface Book {

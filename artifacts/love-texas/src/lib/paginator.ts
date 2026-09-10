@@ -45,7 +45,8 @@ export function paginateBook(
     
     return {
       title: chapter.title,
-      pages
+      pages,
+      images: chapter.images,
     };
   });
   

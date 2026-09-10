@@ -4,7 +4,7 @@ import { BookCard } from '@/components/BookCard';
 import { parseEpub } from '@/lib/epub-parser';
 import { parseFb2 } from '@/lib/fb2-parser';
 import { paginateBook } from '@/lib/paginator';
-import { Plus, Book as BookIcon, BookOpen, Clock3, LibraryBig, RefreshCw, Sparkles } from 'lucide-react';
+import { Plus, Book as BookIcon, BookOpen, LibraryBig, RefreshCw } from 'lucide-react';
 import { Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import backgroundUrl from '@/assets/english-books-background.png';
@@ -135,15 +135,14 @@ export function LibraryPage() {
       <div className="absolute -top-24 -right-28 w-80 h-80 rounded-full bg-accent/25 blur-3xl pointer-events-none" />
       <div className="relative mb-10 flex flex-col xl:flex-row xl:items-end justify-between gap-7">
         <div className="max-w-2xl">
-          <div className="americana-badge mb-4">
+           <div className="americana-badge mb-3">
             <Star size={12} fill="currentColor" /> <span>ENGLISH BOOKS</span><span className="opacity-55">•</span><span>READING CLUB</span>
           </div>
-          <div className="flex items-center gap-2 library-copy text-xs font-bold uppercase tracking-[.2em] mb-4">
+             <div className="flex items-center gap-2 library-copy text-xs font-bold uppercase tracking-[.2em] mb-3">
             <LibraryBig size={15} /> Личная полка
           </div>
-            <h1 data-testid="text-library-title" className="font-editorial text-5xl sm:text-6xl font-semibold tracking-[-.04em] library-copy leading-[.95]">Книги, к которым<br /><em className="library-copy not-italic">хочется вернуться</em></h1>
-            <p className="font-script library-copy text-2xl sm:text-3xl mt-4 -rotate-2">собрано для тихих вечеров</p>
-          <p className="library-copy-soft mt-5 max-w-lg leading-relaxed">Читайте в своём ритме, отмечайте новые слова и собирайте английский, который остаётся с вами.</p>
+             <h1 data-testid="text-library-title" className="font-editorial text-4xl sm:text-5xl font-semibold tracking-[-.04em] library-copy leading-[.98]">Книги, к которым<br /><em className="library-copy not-italic">хочется вернуться</em></h1>
+           <p className="library-copy-soft mt-4 max-w-lg leading-relaxed">Читайте в своём ритме и собирайте английский, который остаётся с вами.</p>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
@@ -169,28 +168,23 @@ export function LibraryPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 mb-6">
-         <div className="inline-flex items-center gap-2 rounded-full bg-white/45 border border-black/10 px-3.5 py-2 text-xs library-copy shadow-sm"><BookOpen size={14} /><span data-testid="text-library-count">{books.length} {books.length === 1 ? 'книга' : 'книг'}</span></div>
-         <div className="inline-flex items-center gap-2 rounded-full bg-white/45 border border-black/10 px-3.5 py-2 text-xs library-copy shadow-sm"><Clock3 size={14} />Ваш тихий час для чтения</div>
-      </div>
-        <div data-testid="card-reading-motivation" className="mb-7 max-w-xl flex items-start gap-3 rounded-2xl border border-black/10 bg-white/45 px-4 py-3.5 library-copy shadow-sm">
-         <div className="mt-0.5 rounded-lg bg-primary/15 p-2"><Sparkles size={16} /></div>
-         <div><p className="text-sm font-semibold">Маленький шаг тоже считается</p><p className="text-xs library-copy-soft mt-0.5">Одна страница сегодня — это уже встреча с английским.</p></div>
-      </div>
+       <div className="flex flex-wrap gap-3 mb-6">
+          <div className="inline-flex items-center gap-2 rounded-full bg-white/55 border border-black/10 px-3.5 py-2 text-xs library-copy shadow-sm"><BookOpen size={14} /><span data-testid="text-library-count">{books.length} {books.length === 1 ? 'книга' : 'книг'}</span></div>
+       </div>
       {error && (
         <div data-testid="status-library-error" className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive">
           <span>{error}</span><button data-testid="button-retry-library" onClick={loadBooks} className="flex items-center gap-1 font-semibold"><RefreshCw size={14} /> Повторить</button>
         </div>
       )}
       {loading ? (
-        <div className="bookshelf shelf-lines rounded-2xl bookshelf-grid">
+        <div className="book-grid">
           {[1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="shelf-cell"><div className="w-full rounded-[12px] bg-muted/70 animate-pulse aspect-[2/3.05]" /></div>
+             <div key={i} className="book-grid-skeleton"><div className="w-full rounded-[14px] bg-muted/70 animate-pulse aspect-[2/3.05]" /></div>
           ))}
         </div>
       ) : books.length > 0 ? (
         <AnimatePresence>
-          <div className="bookshelf shelf-lines rounded-2xl bookshelf-grid sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+           <div className="book-grid">
             {books.map((item, idx) => (
               <motion.div
                 key={item.book.id}
@@ -198,7 +192,7 @@ export function LibraryPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9 }}
                 transition={{ delay: idx * 0.04 }}
-                className="shelf-cell"
+                 className="min-w-0"
               >
                 <BookCard
                   book={item.book}
