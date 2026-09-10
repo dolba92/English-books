@@ -228,6 +228,7 @@ export function ReaderPage() {
   const id = parseInt(params.id || '0', 10);
   const { settings } = useReaderSettings();
   const { toast } = useToast();
+  const customBackgroundColor = settings.backgroundColor === '#f0c8d5' ? undefined : settings.backgroundColor;
 
   const [book, setBook] = useState<Book | null>(null);
   const [pages, setPages] = useState<PageData[]>([]);
@@ -400,7 +401,7 @@ export function ReaderPage() {
   const readerLineHeight = isMobile ? Math.min(settings.lineHeight, 1.5) : settings.lineHeight;
 
   return (
-    <div className="min-h-0 h-[calc(100dvh-64px)] md:min-h-[100dvh] md:h-[100dvh] bg-background text-foreground flex flex-col selection:bg-primary/20 overflow-hidden" style={{ backgroundColor: settings.backgroundColor }}>
+    <div className="min-h-0 h-[calc(100dvh-64px)] md:min-h-[100dvh] md:h-[100dvh] bg-background text-foreground flex flex-col selection:bg-primary/20 overflow-hidden" style={customBackgroundColor ? { backgroundColor: customBackgroundColor } : undefined}>
       <header className="h-14 flex items-center justify-between px-4 border-b border-border/40 shrink-0 sticky top-0 bg-background/90 backdrop-blur-md z-20">
         <div className="flex items-center gap-2">
           <Link href="/" data-testid="link-reader-library" aria-label="Вернуться в библиотеку" className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-full hover:bg-muted">

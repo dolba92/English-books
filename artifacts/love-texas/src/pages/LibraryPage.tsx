@@ -5,7 +5,9 @@ import { parseEpub } from '@/lib/epub-parser';
 import { parseFb2 } from '@/lib/fb2-parser';
 import { paginateBook } from '@/lib/paginator';
 import { Plus, Book as BookIcon, BookOpen, Clock3, LibraryBig, RefreshCw, Sparkles } from 'lucide-react';
+import { Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import backgroundUrl from '@/assets/english-books-background.png';
 
 export function LibraryPage() {
   const [books, setBooks] = useState<{ book: Book; progress: number }[]>([]);
@@ -128,16 +130,20 @@ export function LibraryPage() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className="library-page relative min-h-[100dvh] p-5 sm:p-8 lg:p-12 max-w-[1500px] mx-auto"
+      style={{ '--library-photo': `url(${backgroundUrl})` } as React.CSSProperties}
     >
       <div className="absolute -top-24 -right-28 w-80 h-80 rounded-full bg-accent/25 blur-3xl pointer-events-none" />
       <div className="relative mb-10 flex flex-col xl:flex-row xl:items-end justify-between gap-7">
         <div className="max-w-2xl">
-          <div className="flex items-center gap-2 text-white text-xs font-bold uppercase tracking-[.2em] mb-4">
+          <div className="americana-badge mb-4">
+            <Star size={12} fill="currentColor" /> <span>ENGLISH BOOKS</span><span className="opacity-55">•</span><span>READING CLUB</span>
+          </div>
+          <div className="flex items-center gap-2 library-copy text-xs font-bold uppercase tracking-[.2em] mb-4">
             <LibraryBig size={15} /> Личная полка
           </div>
-            <h1 data-testid="text-library-title" className="font-editorial text-5xl sm:text-6xl font-semibold tracking-[-.04em] text-white leading-[.95]">Книги, к которым<br /><em className="text-white not-italic">хочется вернуться</em></h1>
-            <p className="font-script text-white text-2xl sm:text-3xl mt-4 -rotate-2">собрано для тихих вечеров</p>
-          <p className="text-white/80 mt-5 max-w-lg leading-relaxed">Читайте в своём ритме, отмечайте новые слова и собирайте английский, который остаётся с вами.</p>
+            <h1 data-testid="text-library-title" className="font-editorial text-5xl sm:text-6xl font-semibold tracking-[-.04em] library-copy leading-[.95]">Книги, к которым<br /><em className="library-copy not-italic">хочется вернуться</em></h1>
+            <p className="font-script library-copy text-2xl sm:text-3xl mt-4 -rotate-2">собрано для тихих вечеров</p>
+          <p className="library-copy-soft mt-5 max-w-lg leading-relaxed">Читайте в своём ритме, отмечайте новые слова и собирайте английский, который остаётся с вами.</p>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
@@ -164,12 +170,12 @@ export function LibraryPage() {
       </div>
 
       <div className="flex flex-wrap gap-3 mb-6">
-         <div className="inline-flex items-center gap-2 rounded-full bg-white/15 border border-white/35 px-3.5 py-2 text-xs text-white"><BookOpen size={14} /><span data-testid="text-library-count">{books.length} {books.length === 1 ? 'книга' : 'книг'}</span></div>
-         <div className="inline-flex items-center gap-2 rounded-full bg-white/15 border border-white/35 px-3.5 py-2 text-xs text-white"><Clock3 size={14} />Ваш тихий час для чтения</div>
+         <div className="inline-flex items-center gap-2 rounded-full bg-white/45 border border-black/10 px-3.5 py-2 text-xs library-copy shadow-sm"><BookOpen size={14} /><span data-testid="text-library-count">{books.length} {books.length === 1 ? 'книга' : 'книг'}</span></div>
+         <div className="inline-flex items-center gap-2 rounded-full bg-white/45 border border-black/10 px-3.5 py-2 text-xs library-copy shadow-sm"><Clock3 size={14} />Ваш тихий час для чтения</div>
       </div>
-       <div data-testid="card-reading-motivation" className="mb-7 max-w-xl flex items-start gap-3 rounded-2xl border border-white/35 bg-white/15 px-4 py-3.5 text-white">
-         <div className="mt-0.5 rounded-lg bg-white/20 p-2"><Sparkles size={16} /></div>
-         <div><p className="text-sm font-semibold">Маленький шаг тоже считается</p><p className="text-xs text-white/75 mt-0.5">Одна страница сегодня — это уже встреча с английским.</p></div>
+        <div data-testid="card-reading-motivation" className="mb-7 max-w-xl flex items-start gap-3 rounded-2xl border border-black/10 bg-white/45 px-4 py-3.5 library-copy shadow-sm">
+         <div className="mt-0.5 rounded-lg bg-primary/15 p-2"><Sparkles size={16} /></div>
+         <div><p className="text-sm font-semibold">Маленький шаг тоже считается</p><p className="text-xs library-copy-soft mt-0.5">Одна страница сегодня — это уже встреча с английским.</p></div>
       </div>
       {error && (
         <div data-testid="status-library-error" className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive">

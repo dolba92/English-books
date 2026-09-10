@@ -51,10 +51,10 @@ export function SettingsPage() {
            <h2 className="font-editorial text-2xl font-semibold mb-4">Тема оформления</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { id: 'light',  name: 'Бумага',   bg: 'bg-[#fffaf7]',  border: 'border-[#ead7d2]',   text: 'text-[#4b2924]' },
-              { id: 'pink',   name: 'Розовая', bg: 'bg-[#fff0f4]',  border: 'border-[#e8b6c5]',   text: 'text-[#682f42]' },
+              { id: 'light',  name: 'Бумага',   bg: 'bg-[#fffaf0]',  border: 'border-[#e5d4c0]',   text: 'text-[#4b2924]' },
+              { id: 'pink',   name: 'Розовая', bg: 'bg-[#fbe2ec]',  border: 'border-[#dc9bb5]',   text: 'text-[#682f42]' },
                { id: 'cream',  name: 'Шоколадная', bg: 'bg-[#4b2924]',  border: 'border-[#8f3f5d]',  text: 'text-[#fff8f5]' },
-              { id: 'dark',   name: 'Ночная',   bg: 'bg-[#241512]',  border: 'border-[#6d4353]',  text: 'text-[#fff8f5]' },
+              { id: 'dark',   name: 'Ночная',   bg: 'bg-[#17100f]',  border: 'border-[#7d5262]',  text: 'text-[#fff8f5]' },
             ].map(t => (
               <div data-testid={`button-theme-${t.id}`} role="button" tabIndex={0} onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && handleThemeChange(t.id as Theme)} key={t.id} onClick={() => handleThemeChange(t.id as Theme)}
                 className={`relative cursor-pointer rounded-2xl p-4 border-2 transition-all ${t.bg} ${t.border} ${currentTheme === t.id ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'hover:scale-[1.02]'}`}>

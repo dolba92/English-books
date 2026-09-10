@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'wouter';
-import { BookOpen, BookMarked, Brain, BarChart2, Settings, Heart, Sparkles } from 'lucide-react';
+import { BookOpen, BookMarked, Brain, BarChart2, Settings, Sparkles } from 'lucide-react';
 import { getTheme, applyTheme } from '@/lib/theme';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
+import logoUrl from '@/assets/english-books-logo.png';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [mounted, setMounted] = useState(false);
   const { settings } = useReaderSettings();
+  const customBackgroundColor = settings.backgroundColor === '#f0c8d5' ? undefined : settings.backgroundColor;
 
   useEffect(() => {
     const t = getTheme();
@@ -26,16 +28,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!mounted) return null;
 
   return (
-    <div className="app-shell paper-grain min-h-[100dvh] flex flex-col md:flex-row bg-background transition-colors duration-300" style={{ backgroundColor: settings.backgroundColor }}>
+    <div className="app-shell paper-grain min-h-[100dvh] flex flex-col md:flex-row bg-background transition-colors duration-300" style={customBackgroundColor ? { backgroundColor: customBackgroundColor } : undefined}>
       <nav className="md:w-[232px] bg-sidebar border-r border-sidebar-border flex md:flex-col px-3 py-3 md:p-4 md:sticky md:top-0 md:h-[100dvh] z-20 shrink-0 shadow-[4px_0_24px_rgba(57,35,26,.18)]">
-        <div className="hidden md:flex items-center gap-3 px-2 py-4 mb-7">
-          <div className="w-9 h-9 rounded-[11px] bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center shadow-sm">
-            <Heart size={18} fill="currentColor" />
-          </div>
-          <div>
-            <span className="font-serif font-bold text-xl tracking-tight text-sidebar-foreground block leading-none">Love Texas</span>
-            <span className="text-[10px] uppercase tracking-[.18em] text-sidebar-foreground/55">read a little</span>
-          </div>
+        <div className="hidden md:flex items-center justify-center px-1 py-3 mb-7">
+          <img src={logoUrl} alt="English Books" className="w-full max-w-[190px] h-auto object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,.18)]" />
         </div>
         <div className="flex w-full md:flex-col gap-1.5 overflow-x-auto md:overflow-visible no-scrollbar pb-0">
           {navItems.map((item) => {
@@ -55,7 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
       
-      <main className="flex-1 w-full min-h-full max-w-full overflow-x-hidden relative" style={{ backgroundColor: settings.backgroundColor }}>
+      <main className="flex-1 w-full min-h-full max-w-full overflow-x-hidden relative" style={customBackgroundColor ? { backgroundColor: customBackgroundColor } : undefined}>
         {children}
       </main>
     </div>

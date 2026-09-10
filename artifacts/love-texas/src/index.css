@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Libre+Baskerville:wght@400;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Merriweather:wght@400;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=Space+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Libre+Baskerville:wght@400;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Merriweather:wght@400;700&family=Nunito+Sans:wght@400;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&family=Roboto+Slab:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=Space+Mono:wght@400;700&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
@@ -92,12 +92,17 @@
   --badge-outline: rgba(24, 20, 15, .07);
   --elevate-1: rgba(77, 45, 30, .05);
   --elevate-2: rgba(77, 45, 30, .1);
+  --library-overlay-start: 38 55% 99%;
+  --library-overlay-mid: 339 46% 96%;
+  --library-overlay-end: 20 34% 42%;
+  --library-content: 17 45% 18%;
+  --library-content-soft: 18 27% 34%;
 }
 
 .theme-light {
-  --background: 20 33% 96%;
+  --background: 38 42% 97%;
   --foreground: 17 37% 20%;
-  --card: 22 43% 99%;
+  --card: 38 55% 99%;
   --card-foreground: 17 37% 20%;
   --sidebar: 17 44% 19%;
   --sidebar-foreground: 20 33% 97%;
@@ -111,12 +116,17 @@
   --muted-foreground: 18 18% 48%;
   --accent: 339 58% 86%;
   --accent-foreground: 17 37% 20%;
+  --library-overlay-start: 38 55% 99%;
+  --library-overlay-mid: 339 42% 96%;
+  --library-overlay-end: 20 34% 42%;
+  --library-content: 17 45% 18%;
+  --library-content-soft: 18 27% 34%;
 }
 
 .theme-pink {
-  --background: 339 33% 96%;
+  --background: 339 48% 93%;
   --foreground: 17 37% 20%;
-  --card: 340 45% 99%;
+  --card: 340 62% 98%;
   --card-foreground: 17 37% 20%;
   --sidebar: 17 44% 19%;
   --sidebar-foreground: 340 45% 99%;
@@ -126,10 +136,15 @@
   --primary-foreground: 340 45% 99%;
   --secondary: 339 36% 89%;
   --secondary-foreground: 17 37% 20%;
-  --muted: 339 23% 91%;
-  --muted-foreground: 17 18% 48%;
+  --muted: 339 31% 88%;
+  --muted-foreground: 17 24% 40%;
   --accent: 339 65% 87%;
   --accent-foreground: 17 37% 20%;
+  --library-overlay-start: 339 58% 96%;
+  --library-overlay-mid: 339 68% 91%;
+  --library-overlay-end: 17 38% 38%;
+  --library-content: 17 45% 18%;
+  --library-content-soft: 18 27% 34%;
 }
 
 .theme-cream {
@@ -152,15 +167,15 @@
 }
 
 .dark {
-  --background: 17 31% 11%;
-  --foreground: 20 30% 94%;
-  --border: 17 24% 25%;
-  --card: 17 29% 16%;
-  --card-foreground: 20 30% 94%;
-  --card-border: 17 24% 25%;
-  --sidebar: 17 47% 9%;
-  --sidebar-foreground: 20 30% 94%;
-  --sidebar-border: 17 31% 20%;
+  --background: 17 36% 8%;
+  --foreground: 20 45% 96%;
+  --border: 17 28% 23%;
+  --card: 17 32% 13%;
+  --card-foreground: 20 45% 96%;
+  --card-border: 17 28% 23%;
+  --sidebar: 17 52% 6%;
+  --sidebar-foreground: 20 45% 96%;
+  --sidebar-border: 17 36% 17%;
   --sidebar-primary: 339 65% 73%;
   --sidebar-primary-foreground: 17 31% 11%;
   --sidebar-accent: 17 31% 18%;
@@ -173,7 +188,7 @@
   --secondary: 17 24% 24%;
   --secondary-foreground: 20 30% 94%;
   --muted: 17 24% 21%;
-  --muted-foreground: 20 17% 68%;
+  --muted-foreground: 20 24% 76%;
   --accent: 339 42% 34%;
   --accent-foreground: 20 30% 94%;
   --destructive: 345 62% 62%;
@@ -183,6 +198,11 @@
   --app-font-sans: 'DM Sans', sans-serif;
   --app-font-serif: 'Source Serif 4', serif;
   --app-font-mono: 'Space Mono', monospace;
+  --library-overlay-start: 17 36% 8%;
+  --library-overlay-mid: 17 34% 12%;
+  --library-overlay-end: 17 36% 7%;
+  --library-content: 20 45% 96%;
+  --library-content-soft: 20 27% 82%;
 }
 
 .theme-dark {
@@ -218,13 +238,39 @@
   }
   .library-page {
     background:
-      radial-gradient(circle at 82% 12%, hsl(0 0% 100% / .18), transparent 28%),
-      linear-gradient(135deg, hsl(339 65% 84%) 0%, hsl(339 47% 78%) 38%, hsl(17 44% 50%) 72%, hsl(17 48% 28%) 100%);
+      linear-gradient(135deg, hsl(var(--library-overlay-start) / .72) 0%, hsl(var(--library-overlay-mid) / .57) 42%, hsl(var(--library-overlay-end) / .23) 100%),
+      var(--library-photo);
+    background-color: hsl(var(--background));
+    background-size: cover;
+    background-position: center;
     background-attachment: fixed;
+    color: hsl(var(--library-content));
+  }
+  .library-copy { color: hsl(var(--library-content)); }
+  .library-copy-soft { color: hsl(var(--library-content-soft)); }
+  .americana-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .48rem;
+    color: hsl(var(--library-content));
+    font-size: .68rem;
+    font-weight: 800;
+    letter-spacing: .19em;
+    text-transform: uppercase;
+    border-top: 1px solid hsl(var(--library-content) / .35);
+    border-bottom: 1px solid hsl(var(--library-content) / .35);
+    padding: .42rem .1rem;
+  }
+  .theme-dark .app-shell,
+  .theme-dark .app-shell > main,
+  .theme-dark .app-shell .bg-background {
+    background-color: hsl(var(--background)) !important;
   }
   .bookshelf {
     background:
-      repeating-linear-gradient(90deg, hsl(28 46% 62% / .08) 0 2px, transparent 2px 32px),
+      repeating-radial-gradient(ellipse at 20% 35%, hsl(28 55% 72% / .13) 0 2px, transparent 3px 30px),
+      repeating-linear-gradient(7deg, hsl(29 48% 72% / .10) 0 3px, transparent 3px 24px),
+      repeating-linear-gradient(90deg, hsl(28 46% 62% / .10) 0 2px, transparent 2px 32px),
       linear-gradient(160deg, hsl(28 49% 52%), hsl(17 48% 26%));
     border: 10px solid hsl(17 44% 19%);
     box-shadow: inset 0 0 0 1px hsl(339 58% 70% / .18), 0 24px 45px hsl(17 44% 19% / .22);
@@ -236,7 +282,9 @@
     gap: 0 12px;
     padding: 18px 12px 20px;
     background:
-      repeating-linear-gradient(90deg, hsl(28 55% 70% / .06) 0 2px, transparent 2px 38px),
+      repeating-radial-gradient(ellipse at 18% 36%, hsl(28 58% 76% / .12) 0 2px, transparent 3px 28px),
+      repeating-linear-gradient(7deg, hsl(29 48% 72% / .09) 0 3px, transparent 3px 24px),
+      repeating-linear-gradient(90deg, hsl(28 55% 70% / .08) 0 2px, transparent 2px 38px),
       repeating-linear-gradient(to bottom, transparent 0, transparent 314px, hsl(28 45% 66% / .95) 314px, hsl(28 45% 66% / .95) 324px, hsl(17 48% 22% / .92) 324px, hsl(17 48% 22% / .92) 336px);
   }
   .shelf-cell {
