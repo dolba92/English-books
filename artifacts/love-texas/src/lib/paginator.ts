@@ -81,14 +81,11 @@ export interface MeasuredPaginationOptions {
 }
 
 /**
- * True browser-height pagination.
+ * True browser-height pagination with real chapter boundaries.
  *
- * The important detail is that the stream is continuous across BookChapter
- * boundaries. EPUB spine files and FB2 sections are structural containers,
- * not guaranteed page breaks. A short chapter/section may therefore share a
- * page with the next chapter heading instead of leaving most of the screen
- * empty. Chapter headings are retained as real blocks, so TOC/navigation still
- * knows where every chapter starts.
+ * Every BookChapter starts on a fresh reader page, while the text inside that
+ * chapter is packed by the actual rendered DOM height. This keeps chapters
+ * visually separate without going back to fixed paragraph/character limits.
  */
 export function paginateBookContinuousMeasured(
   chapters: BookChapter[],
@@ -250,35 +247,25 @@ export function paginateBookContinuousMeasured(
 
   chapters.forEach((chapter, chapterIndex) => {
     const title = chapter.title || `Chapter ${chapterIndex + 1}`;
-    const heading: ContinuousPageBlock = { kind: 'heading', title, images: chapter.images };
-    const firstParagraph = chapter.paragraphs.find(Boolean) || '';
 
-    // Do not strand a chapter heading as the last thing on a page. If the
-    // heading plus a small beginning of the first paragraph cannot fit, start
-    // the chapter on the next page. Otherwise continue on the current page so
-    // short structural sections do not create giant blank areas.
-    if (current.length && firstParagraph) {
-      const previewWords = firstParagraph.trim().split(/\s+/).slice(0, 10).join(' ');
-      const preview: ContinuousPageBlock[] = [
-        ...current,
-        heading,
-        { kind: 'paragraph', text: previewWords },
-      ];
-      if (!fits(preview)) flush();
-    } else if (current.length && !fits([...current, heading])) {
-      flush();
-    }
+    // A real chapter always starts on a fresh page. The previous version let
+    // chapter boundaries flow together, which filled the screen but visually
+    // glued several chapters/sections into one page.
+    flush();
 
     activeTitle = title;
-    if (!current.length) currentPageTitle = activeTitle;
-    current.push(heading);
+    currentPageTitle = title;
+    current.push({ kind: 'heading', title, images: chapter.images });
 
     for (const paragraph of chapter.paragraphs) {
       if (paragraph?.trim()) addParagraph(paragraph);
     }
+
+    // Finish the chapter here so the next chapter cannot share this page.
+    // A genuinely short chapter is therefore allowed to leave blank space.
+    flush();
   });
 
-  flush();
   measurer.remove();
   return { pages, totalPages: pages.length };
 }
