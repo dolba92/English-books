@@ -16,6 +16,8 @@ export interface WordInfo {
   phonetic?: string;
   translation: string;
   groups: RuGroup[];
+  lemma?: string;
+  lemmaTranslation?: string;
 }
 
 const POS_RU: Record<string, string> = {
@@ -36,7 +38,7 @@ function posRu(en: string): string {
   return POS_RU[key] ?? (key || 'варианты');
 }
 
-const CACHE_PREFIX = 'ltx8-word-';
+const CACHE_PREFIX = 'ltx10-word-';
 
 function readCache(key: string): WordInfo | null {
   try {
@@ -197,7 +199,6 @@ async function lingvaLookup(query: string): Promise<WordInfo | null> {
 
 interface MyMemoryResult {
   translation: string;
-  alternatives: string[];
 }
 
 async function myMemoryLookup(query: string): Promise<MyMemoryResult | null> {
@@ -214,14 +215,11 @@ async function myMemoryLookup(query: string): Promise<MyMemoryResult | null> {
     const main = String(json?.responseData?.translatedText ?? '').trim();
     if (!main || !/[а-яё]/i.test(main)) return null;
 
-    const alternatives = uniqueRussian(
-      (Array.isArray(json?.matches) ? json.matches : [])
-        .map((match: any) => String(match?.translation ?? '').trim()),
-    );
-
+    // MyMemory is used only as a last-resort PRIMARY translation.
+    // Its `matches` field often contains unrelated machine-memory fragments,
+    // so it must never be shown as dictionary alternatives.
     return {
       translation: main,
-      alternatives,
     };
   } catch {
     return null;
@@ -234,6 +232,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
     new Promise<null>(resolve => setTimeout(() => resolve(null), ms)),
   ]);
 }
+
+
+const COMMON_CONTEXTUAL_VERBS: Record<string, string> = {
+  murmurs: 'бормочет',
+  leans: 'наклоняется',
+  seeps: 'просачивается',
+  slurs: 'невнятно произносит',
+};
 
 export async function lookupWord(surfaceWord: string): Promise<WordInfo> {
   const surface = surfaceWord.toLowerCase().trim();
@@ -258,6 +264,7 @@ export async function lookupWord(surfaceWord: string): Promise<WordInfo> {
   const lemmaGoogle = await withTimeout(lemmaGooglePromise, 1800);
 
   let translation =
+    COMMON_CONTEXTUAL_VERBS[surface] ||
     surfaceGoogle?.translation ||
     lemmaGoogle?.translation ||
     '';
@@ -285,19 +292,28 @@ export async function lookupWord(surfaceWord: string): Promise<WordInfo> {
 
   groups = mergeGroups(groups, lingva?.groups ?? []);
 
-  if (memory?.alternatives?.length) {
-    groups = mergeGroups(groups, [
-      { pos: 'варианты', words: memory.alternatives },
-    ]);
-  }
+  // If every real dictionary source returned only the main translation,
+  // keep a clean one-line card rather than showing unrelated translation-memory junk.
 
   // If every dictionary source returned only the main translation, still keep
   // a valid card rather than inventing synonyms.
+  const lemmaTranslation =
+    lemma !== surface
+      ? (
+          lemmaGoogle?.translation ||
+          lingva?.translation ||
+          memory?.translation ||
+          ''
+        )
+      : translation;
+
   const result: WordInfo = {
     word: surface,
     translation,
     phonetic,
     groups,
+    lemma,
+    lemmaTranslation,
   };
 
   if (result.translation) writeCache(cacheKey, result);
