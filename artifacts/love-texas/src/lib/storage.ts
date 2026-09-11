@@ -1,4 +1,4 @@
-import { openDB, DBSchema, IDBPDatabase } from 'idb';
+
 
 export interface BookChapter {
   title: string;
@@ -53,6 +53,21 @@ export interface AppStats {
   firstUsed: number;
 }
 
+export interface PaginationCachePage {
+  title: string;
+  blocks: Array<
+    | { kind: 'heading'; title: string; images?: string[] }
+    | { kind: 'paragraph'; text: string }
+  >;
+}
+
+export interface PaginationCacheEntry {
+  key: string;
+  bookId: number;
+  pages: PaginationCachePage[];
+  createdAt: number;
+}
+
 interface LoveTexasDB extends DBSchema {
   books: {
     key: number;
@@ -71,13 +86,18 @@ interface LoveTexasDB extends DBSchema {
     key: string;
     value: AppStats;
   };
+  paginationCache: {
+    key: string;
+    value: PaginationCacheEntry;
+    indexes: { 'by-book': number };
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<LoveTexasDB>> | null = null;
 
 async function getDB() {
   if (!dbPromise) {
-    dbPromise = openDB<LoveTexasDB>('love-texas-db', 1, {
+    dbPromise = openDB<LoveTexasDB>('love-texas-db', 2, {
       upgrade(db) {
         if (!db.objectStoreNames.contains('books')) {
           db.createObjectStore('books', { keyPath: 'id', autoIncrement: true });
@@ -91,6 +111,10 @@ async function getDB() {
         }
         if (!db.objectStoreNames.contains('stats')) {
           db.createObjectStore('stats', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('paginationCache')) {
+          const cacheStore = db.createObjectStore('paginationCache', { keyPath: 'key' });
+          cacheStore.createIndex('by-book', 'bookId', { unique: false });
         }
       },
     });
@@ -130,6 +154,29 @@ export async function deleteBook(id: number): Promise<void> {
   const db = await getDB();
   await db.delete('books', id);
   await db.delete('progress', id);
+  const cacheKeys = await db.getAllKeysFromIndex('paginationCache', 'by-book', id);
+  const tx = db.transaction('paginationCache', 'readwrite');
+  await Promise.all(cacheKeys.map(key => tx.store.delete(key)));
+  await tx.done;
+}
+
+// --- PAGINATION CACHE ---
+export async function getPaginationCache(key: string): Promise<PaginationCacheEntry | undefined> {
+  const db = await getDB();
+  return db.get('paginationCache', key);
+}
+
+export async function savePaginationCache(entry: PaginationCacheEntry): Promise<void> {
+  const db = await getDB();
+  await db.put('paginationCache', entry);
+}
+
+export async function clearPaginationCacheForBook(bookId: number): Promise<void> {
+  const db = await getDB();
+  const keys = await db.getAllKeysFromIndex('paginationCache', 'by-book', bookId);
+  const tx = db.transaction('paginationCache', 'readwrite');
+  await Promise.all(keys.map(key => tx.store.delete(key)));
+  await tx.done;
 }
 
 // --- PROGRESS ---
@@ -218,6 +265,7 @@ export async function clearAllData(): Promise<void> {
   await db.clear('progress');
   await db.clear('dictionary');
   await db.clear('stats');
+  await db.clear('paginationCache');
   await initStats();
 }
 
