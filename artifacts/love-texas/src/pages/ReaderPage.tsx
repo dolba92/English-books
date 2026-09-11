@@ -122,9 +122,8 @@ function WordTooltip({
   const [selectedGroup, setSelectedGroup] = React.useState(0);
   const popupRef = React.useRef<HTMLDivElement>(null);
   const [popupStyle, setPopupStyle] = React.useState<React.CSSProperties>({
-    left: Math.max(148, Math.min(window.innerWidth - 148, x)),
-    top: Math.max(14, y),
-    transform: 'translate(-50%, -100%)',
+    left: Math.max(12, Math.min(window.innerWidth - 300, x - 144)),
+    top: Math.max(12, y - 320),
   });
 
   React.useEffect(() => {
@@ -151,28 +150,45 @@ function WordTooltip({
   React.useLayoutEffect(() => {
     const popup = popupRef.current;
     if (!popup) return;
-    const margin = 12;
-    const footerReserve = 72;
+
+    const margin = 16;
+    const footerReserve = 56;
+    const gap = 10;
     const rect = popup.getBoundingClientRect();
+    const safeRight = window.innerWidth - margin;
     const safeBottom = window.innerHeight - footerReserve - margin;
-    const enoughBelow = safeBottom - y >= rect.height + margin;
-    const opensDown = enoughBelow || y < rect.height + margin;
-    const top = opensDown
-      ? Math.min(safeBottom - rect.height, y + 10)
-      : Math.max(margin, y - rect.height - 10);
-    const left = Math.max(margin + rect.width / 2, Math.min(window.innerWidth - margin - rect.width / 2, x));
-    setPopupStyle({
-      left,
-      top: Math.max(margin, top),
-      transform: 'translateX(-50%)',
-    });
+
+    // Position with real left/top coordinates. Do not use translateX for centering:
+    // Framer Motion also owns `transform`, which can overwrite that translation and
+    // push the popup outside the viewport.
+    let left = x - rect.width / 2;
+    left = Math.min(Math.max(left, margin), Math.max(margin, safeRight - rect.width));
+
+    const roomBelow = safeBottom - y;
+    const roomAbove = y - margin;
+    let top: number;
+
+    if (roomBelow >= rect.height + gap) {
+      top = y + gap;
+    } else if (roomAbove >= rect.height + gap) {
+      top = y - rect.height - gap;
+    } else {
+      // Very tall cards: keep the whole card inside the safe viewport and let the
+      // card body scroll internally instead of letting the popup escape the screen.
+      top = Math.min(
+        Math.max(margin, y - rect.height / 2),
+        Math.max(margin, safeBottom - rect.height),
+      );
+    }
+
+    setPopupStyle({ left, top });
   }, [word, x, y, info, loading, selectedGroup, lemma]);
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 6, scale: 0.96 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
       transition={{ duration: 0.12 }}
        ref={popupRef}
        className="fixed z-50 pointer-events-auto"
