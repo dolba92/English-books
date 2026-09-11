@@ -140,14 +140,27 @@ export function paginateBookContinuousMeasured(
   } as CSSStyleDeclaration);
   document.body.appendChild(measurer);
 
-  const appendMeasuredBlock = (block: ContinuousPageBlock, index: number) => {
+  /**
+   * PERFORMANCE NOTE:
+   * The old paginator rebuilt the whole hidden page DOM for every single
+   * "does this fit?" check. On a full novel that meant thousands of complete
+   * DOM rebuilds and could block the browser for several seconds.
+   *
+   * This version keeps the current page mounted in the hidden measurer and
+   * appends only one temporary candidate element for each check. The resulting
+   * page boundaries stay the same, but opening/reflowing books is much faster.
+   */
+  const createBlockElement = (block: ContinuousPageBlock, index: number): HTMLElement[] => {
     if (block.kind === 'heading') {
+      const elements: HTMLElement[] = [];
+
       if (showIllustrations && block.images?.length && illustrationReservePx > 0) {
         const imageReserve = document.createElement('div');
         imageReserve.style.height = `${illustrationReservePx}px`;
         imageReserve.style.marginBottom = '20px';
-        measurer.appendChild(imageReserve);
+        elements.push(imageReserve);
       }
+
       if (block.title) {
         const h = document.createElement('h2');
         h.textContent = block.title;
@@ -159,9 +172,10 @@ export function paginateBookContinuousMeasured(
           lineHeight: '1.35',
           fontWeight: '700',
         });
-        measurer.appendChild(h);
+        elements.push(h);
       }
-      return;
+
+      return elements;
     }
 
     const p = document.createElement('p');
@@ -175,38 +189,56 @@ export function paginateBookContinuousMeasured(
       textAlign,
       overflowWrap: 'break-word',
     });
-    measurer.appendChild(p);
+    return [p];
   };
 
-  const measure = (blocks: ContinuousPageBlock[]) => {
-    measurer.replaceChildren();
-    blocks.forEach((block, index) => appendMeasuredBlock(block, index));
-    return measurer.getBoundingClientRect().height;
+  const heightFits = () => measurer.getBoundingClientRect().height <= contentHeight + 0.5;
+
+  const appendPermanentBlock = (block: ContinuousPageBlock, index: number) => {
+    for (const el of createBlockElement(block, index)) measurer.appendChild(el);
   };
 
-  const fits = (blocks: ContinuousPageBlock[]) => measure(blocks) <= contentHeight + 0.5;
+  const fitsCandidate = (block: ContinuousPageBlock, index: number) => {
+    const elements = createBlockElement(block, index);
+    for (const el of elements) measurer.appendChild(el);
+    const fits = heightFits();
+    for (const el of elements) el.remove();
+    return fits;
+  };
 
   const splitParagraphToFit = (
     text: string,
-    existing: ContinuousPageBlock[],
+    currentBlockCount: number,
     forceProgress: boolean,
   ): [string, string] => {
     const words = text.trim().split(/\s+/).filter(Boolean);
     if (words.length <= 1) return [text, ''];
 
+    // Mount one temporary paragraph and only change its text while binary
+    // searching. This avoids rebuilding all existing page elements each time.
+    const temp = createBlockElement(
+      { kind: 'paragraph', text: '' },
+      currentBlockCount,
+    )[0] as HTMLParagraphElement;
+    measurer.appendChild(temp);
+
     let low = 1;
     let high = words.length;
     let best = 0;
+
     while (low <= high) {
       const mid = Math.floor((low + high) / 2);
-      const prefix = words.slice(0, mid).join(' ');
-      if (fits([...existing, { kind: 'paragraph', text: prefix }])) {
+      temp.textContent = words.slice(0, mid).join(' ');
+
+      if (heightFits()) {
         best = mid;
         low = mid + 1;
       } else {
         high = mid - 1;
       }
     }
+
+    temp.remove();
 
     const count = best > 0 ? best : (forceProgress ? 1 : 0);
     return [words.slice(0, count).join(' '), words.slice(count).join(' ')];
@@ -217,26 +249,46 @@ export function paginateBookContinuousMeasured(
   let activeTitle = chapters[0]?.title || '';
   let currentPageTitle = activeTitle;
 
+  const clearMeasuredPage = () => {
+    measurer.replaceChildren();
+  };
+
+  const pushBlock = (block: ContinuousPageBlock) => {
+    appendPermanentBlock(block, current.length);
+    current.push(block);
+  };
+
   const flush = () => {
     if (!current.length) return;
     pages.push({ title: currentPageTitle || activeTitle, blocks: current });
     current = [];
     currentPageTitle = activeTitle;
+    clearMeasuredPage();
   };
 
   const addParagraph = (originalText: string) => {
     let remaining = originalText.trim();
+
     while (remaining) {
       const fullBlock: ContinuousPageBlock = { kind: 'paragraph', text: remaining };
-      if (fits([...current, fullBlock])) {
-        current.push(fullBlock);
+
+      if (fitsCandidate(fullBlock, current.length)) {
+        pushBlock(fullBlock);
         return;
       }
 
-      const [head, tail] = splitParagraphToFit(remaining, current, current.length === 0);
-      if (head) current.push({ kind: 'paragraph', text: head });
+      const [head, tail] = splitParagraphToFit(
+        remaining,
+        current.length,
+        current.length === 0,
+      );
+
+      if (head) {
+        pushBlock({ kind: 'paragraph', text: head });
+      }
 
       if (current.length) flush();
+
       remaining = tail || (head ? '' : remaining);
 
       // If nothing could fit into a non-empty page, flush() made room and the
@@ -245,27 +297,27 @@ export function paginateBookContinuousMeasured(
     }
   };
 
-  chapters.forEach((chapter, chapterIndex) => {
-    const title = chapter.title || `Chapter ${chapterIndex + 1}`;
+  try {
+    chapters.forEach((chapter, chapterIndex) => {
+      const title = chapter.title || `Chapter ${chapterIndex + 1}`;
 
-    // A real chapter always starts on a fresh page. The previous version let
-    // chapter boundaries flow together, which filled the screen but visually
-    // glued several chapters/sections into one page.
-    flush();
+      // Every real chapter starts on a fresh reader page.
+      flush();
 
-    activeTitle = title;
-    currentPageTitle = title;
-    current.push({ kind: 'heading', title, images: chapter.images });
+      activeTitle = title;
+      currentPageTitle = title;
+      pushBlock({ kind: 'heading', title, images: chapter.images });
 
-    for (const paragraph of chapter.paragraphs) {
-      if (paragraph?.trim()) addParagraph(paragraph);
-    }
+      for (const paragraph of chapter.paragraphs) {
+        if (!paragraph?.trim()) continue;
+        addParagraph(paragraph);
+      }
 
-    // Finish the chapter here so the next chapter cannot share this page.
-    // A genuinely short chapter is therefore allowed to leave blank space.
-    flush();
-  });
+      flush();
+    });
+  } finally {
+    measurer.remove();
+  }
 
-  measurer.remove();
   return { pages, totalPages: pages.length };
 }
