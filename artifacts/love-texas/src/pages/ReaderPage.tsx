@@ -98,6 +98,18 @@ function normalizeReadingText(text: string): string {
 
 interface PageData { title: string; blocks: ContinuousPageBlock[]; }
 interface TocEntry { title: string; pageIdx: number; }
+interface PaginationLayoutSettings {
+  fontFamily: string;
+  fontSize: number;
+  lineHeight: number;
+  pageWidth: 'narrow' | 'medium' | 'wide';
+  pageMargin: 'compact' | 'comfortable' | 'wide';
+  paragraphSpacing: number;
+  firstLineIndent: boolean;
+  textAlign: 'left' | 'justify';
+  fontWeight: 400 | 500 | 600;
+  showIllustrations: boolean;
+}
 
 // ── Word Tooltip ─────────────────────────────────────────────────────────────
 interface TooltipState {
@@ -384,6 +396,18 @@ export function ReaderPage() {
 
   const [showToc, setShowToc] = useState(false);
   const [showReaderSettings, setShowReaderSettings] = useState(false);
+  const [paginationLayout, setPaginationLayout] = useState<PaginationLayoutSettings>(() => ({
+    fontFamily: settings.fontFamily,
+    fontSize: settings.fontSize,
+    lineHeight: settings.lineHeight,
+    pageWidth: settings.pageWidth,
+    pageMargin: settings.pageMargin,
+    paragraphSpacing: settings.paragraphSpacing,
+    firstLineIndent: settings.firstLineIndent,
+    textAlign: settings.textAlign,
+    fontWeight: settings.fontWeight,
+    showIllustrations: settings.showIllustrations,
+  }));
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [immersiveFallback, setImmersiveFallback] = useState(false);
   const [showHint, setShowHint] = useState(() => !localStorage.getItem('reader-hint-dismissed'));
@@ -458,35 +482,64 @@ export function ReaderPage() {
   }, [pages, currentPageIdx]);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setPaginationLayout({
+        fontFamily: settings.fontFamily,
+        fontSize: settings.fontSize,
+        lineHeight: settings.lineHeight,
+        pageWidth: settings.pageWidth,
+        pageMargin: settings.pageMargin,
+        paragraphSpacing: settings.paragraphSpacing,
+        firstLineIndent: settings.firstLineIndent,
+        textAlign: settings.textAlign,
+        fontWeight: settings.fontWeight,
+        showIllustrations: settings.showIllustrations,
+      });
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [
+    settings.fontFamily,
+    settings.fontSize,
+    settings.lineHeight,
+    settings.pageWidth,
+    settings.pageMargin,
+    settings.paragraphSpacing,
+    settings.firstLineIndent,
+    settings.textAlign,
+    settings.fontWeight,
+    settings.showIllustrations,
+  ]);
+
+  useEffect(() => {
     if (!book || pages.length === 0) return;
     const isMobileLayout = viewportWidth < 640;
     const panelWidth = viewportWidth >= 768
-      ? (showReaderSettings ? 390 : selectedSentence ? 380 : 0) + (showToc ? 280 : 0)
+      ? (selectedSentence ? 380 : 0) + (showToc ? 280 : 0)
       : 0;
     const mainWidth = Math.max(280, viewportWidth - panelWidth);
-    const maxReaderWidth = settings.pageWidth === 'narrow' ? 760 : settings.pageWidth === 'wide' ? 1250 : 980;
+    const maxReaderWidth = paginationLayout.pageWidth === 'narrow' ? 760 : paginationLayout.pageWidth === 'wide' ? 1250 : 980;
     const horizontalPadding = isMobileLayout
-      ? (settings.pageMargin === 'compact' ? 24 : settings.pageMargin === 'wide' ? 48 : 36)
-      : (settings.pageMargin === 'compact' ? 48 : settings.pageMargin === 'wide' ? 128 : 80);
+      ? (paginationLayout.pageMargin === 'compact' ? 24 : paginationLayout.pageMargin === 'wide' ? 48 : 36)
+      : (paginationLayout.pageMargin === 'compact' ? 48 : paginationLayout.pageMargin === 'wide' ? 128 : 80);
     const contentWidth = Math.max(260, Math.min(mainWidth, maxReaderWidth) - horizontalPadding);
     const verticalPadding = isMobileLayout ? 24 : 32;
     const hintReserve = showHint ? (isMobileLayout ? 112 : 84) : 0;
     // Header = 56px, footer = 36px. Keep only a small safety gap: the old
     // estimator reserved far too much room and left half-empty EPUB pages.
     const contentHeight = Math.max(180, viewportHeight - 56 - 44 - verticalPadding - hintReserve - 24);
-    const fontCssForMeasure = getFontCss(settings.fontFamily);
-    const illustrationReserve = settings.showIllustrations ? Math.min(viewportHeight * 0.38, 300) : 0;
+    const fontCssForMeasure = getFontCss(paginationLayout.fontFamily);
+    const illustrationReserve = paginationLayout.showIllustrations ? Math.min(viewportHeight * 0.38, 300) : 0;
     const { pages: measuredPages } = paginateBookContinuousMeasured(book.content, {
       contentWidth,
       contentHeight,
-      fontSize: settings.fontSize,
-      lineHeight: settings.lineHeight,
+      fontSize: paginationLayout.fontSize,
+      lineHeight: paginationLayout.lineHeight,
       fontFamily: fontCssForMeasure,
-      fontWeight: settings.fontWeight,
-      paragraphSpacingEm: settings.paragraphSpacing,
-      firstLineIndent: settings.firstLineIndent,
-      textAlign: settings.textAlign,
-      showIllustrations: settings.showIllustrations,
+      fontWeight: paginationLayout.fontWeight,
+      paragraphSpacingEm: paginationLayout.paragraphSpacing,
+      firstLineIndent: paginationLayout.firstLineIndent,
+      textAlign: paginationLayout.textAlign,
+      showIllustrations: paginationLayout.showIllustrations,
       illustrationReservePx: illustrationReserve,
     });
     const nextPages: PageData[] = measuredPages;
@@ -506,17 +559,8 @@ export function ReaderPage() {
     viewportWidth,
     viewportHeight,
     selectedSentence,
-    showReaderSettings,
     showToc,
-    settings.fontFamily,
-    settings.fontSize,
-    settings.lineHeight,
-    settings.pageWidth,
-    settings.pageMargin,
-    settings.paragraphSpacing,
-    settings.firstLineIndent,
-    settings.textAlign,
-    settings.readerTheme,
+    paginationLayout,
     showHint,
     isFullscreen,
     immersiveFallback,
@@ -762,7 +806,7 @@ export function ReaderPage() {
         </AnimatePresence>
 
         {/* Reader */}
-         <main className={`min-h-0 flex-1 relative flex items-center justify-center overflow-hidden transition-all duration-300 ${selectedSentence ? 'md:mr-[380px]' : ''} ${showReaderSettings ? 'md:mr-[390px]' : ''} ${showToc ? 'md:ml-[280px]' : ''}`}>
+         <main className={`min-h-0 flex-1 relative flex items-center justify-center overflow-hidden transition-all duration-300 ${selectedSentence ? 'md:mr-[380px]' : ''} ${showToc ? 'md:ml-[280px]' : ''}`}>
             <button data-testid="button-reader-prev" aria-label="Предыдущая страница" onClick={handlePrev} className="absolute left-0 top-0 bottom-0 w-[8%] md:w-14 hover:bg-foreground/[0.02] flex items-center justify-center transition-colors text-transparent z-10">
              <ChevronLeft size={18} aria-hidden="true" />
           </button>
