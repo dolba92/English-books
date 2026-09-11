@@ -264,7 +264,7 @@
   .book-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
+    gap: .85rem;
   }
   .book-grid-skeleton { min-width: 0; }
   .page-container { width: 100%; margin-inline: auto; padding: 2rem 1.25rem 5rem; }
@@ -336,16 +336,16 @@
 @keyframes breathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 
 @media (min-width: 640px) {
-  .book-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; }
+  .book-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
   .page-container { padding-inline: 2rem; padding-top: 2.75rem; }
 }
 
 @media (min-width: 1024px) {
-  .book-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.5rem; }
+  .book-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.15rem; }
 }
 
 @media (min-width: 1280px) {
-  .book-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1.5rem; }
+  .book-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1.15rem; }
 }
 
 @media (max-width: 767px) {
