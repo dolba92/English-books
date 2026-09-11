@@ -60,6 +60,39 @@ function extractTextFromHtml(htmlText: string): string[] {
   return paragraphs;
 }
 
+function isNavigationLikeSpineItem(item: ManifestItem, htmlText: string, paragraphs: string[]): boolean {
+  const properties = item.properties.toLowerCase().split(/\s+/).filter(Boolean);
+  const href = item.href.toLowerCase();
+
+  // EPUB3 navigation documents and the common EPUB2/converted TOC filenames
+  // are metadata/navigation, not prose that should appear in the reader.
+  if (properties.includes('nav')) return true;
+  if (/(^|\/)(toc|contents?|navigation|nav|landmarks?)([-_.\/]|$)/i.test(href)) return true;
+
+  const doc = parseHtml(htmlText);
+  if (doc.querySelector('nav[epub\\:type="toc"], nav[role="doc-toc"], nav#toc, nav.toc')) return true;
+
+  const bodyText = normalizeText(doc.body?.textContent || '');
+  const links = Array.from(doc.querySelectorAll('a'));
+  const linkText = normalizeText(links.map(link => link.textContent || '').join(' '));
+  const linkChars = linkText.length;
+  const bodyChars = Math.max(1, bodyText.length);
+  const linkDensity = linkChars / bodyChars;
+
+  const shortEntries = paragraphs.filter(p => p.length <= 90);
+  const tocWords = paragraphs.filter(p =>
+    /^(chapter|part|prologue|epilogue|acknowledg(e)?ments?|about the (author|publisher)|contents?)\b/i.test(p.trim()),
+  );
+
+  // Some publishers put a plain XHTML contents page in the spine without
+  // marking it as `nav`. High link density plus many short chapter-like rows is
+  // a strong signal that this is navigation rather than book prose.
+  if (links.length >= 4 && linkDensity >= 0.55 && shortEntries.length >= 4) return true;
+  if (links.length >= 3 && tocWords.length >= 3 && linkDensity >= 0.35) return true;
+
+  return false;
+}
+
 async function fileToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -186,14 +219,29 @@ export async function parseEpub(file: File): Promise<{
       if (!htmlText) continue;
       const paragraphs = extractTextFromHtml(htmlText);
       if (!paragraphs.length) continue;
+      if (isNavigationLikeSpineItem(item, htmlText, paragraphs)) continue;
       const images = await extractImagesFromHtml(zip, item, manifest);
-      chapterNum++;
-      const heading = parseHtml(htmlText).querySelector('h1, h2, h3')?.textContent?.trim();
-      const chapterTitle = normalizeText(heading || `Chapter ${chapterNum}`);
-      if (paragraphs.length < 3 && chapters.length > 0) {
-        chapters[chapters.length - 1].paragraphs.push(...paragraphs);
-        chapters[chapters.length - 1].images = [...(chapters[chapters.length - 1].images || []), ...images];
+      const headingText = parseHtml(htmlText).querySelector('h1, h2, h3')?.textContent?.trim();
+      const heading = normalizeText(headingText || '');
+      const previous = chapters[chapters.length - 1];
+
+      // EPUB spine items are files, not necessarily chapters. Many publishers
+      // split one visible chapter across several XHTML files. Treating every
+      // spine item as a chapter forced a hard page break at each file boundary,
+      // which produced pages with only a few short paragraphs and a huge blank
+      // lower half. A file with no heading is therefore a continuation of the
+      // current chapter; a repeated heading is also a continuation.
+      const repeatsPreviousHeading = Boolean(
+        previous && heading && previous.title.trim().toLowerCase() === heading.toLowerCase(),
+      );
+      const isContinuation = Boolean(previous && (!heading || repeatsPreviousHeading));
+
+      if (isContinuation) {
+        previous.paragraphs.push(...paragraphs);
+        previous.images = [...(previous.images || []), ...images];
       } else {
+        chapterNum++;
+        const chapterTitle = heading || `Chapter ${chapterNum}`;
         chapters.push({ title: chapterTitle, paragraphs, images });
       }
     } catch {
