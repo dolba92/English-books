@@ -39,7 +39,7 @@ function posRu(en: string): string {
   return POS_RU[key] ?? (key || 'варианты');
 }
 
-const CACHE_PREFIX = 'ltx11-word-';
+const CACHE_PREFIX = 'ltx12-word-';
 
 function readCache(key: string): WordInfo | null {
   try {
@@ -240,6 +240,10 @@ const COMMON_CONTEXTUAL_VERBS: Record<string, string> = {
   leans: 'наклоняется',
   seeps: 'просачивается',
   slurs: 'невнятно произносит',
+  means: 'означает',
+  trying: 'пытаясь',
+  standing: 'стоя',
+  staring: 'глядя',
 };
 
 
