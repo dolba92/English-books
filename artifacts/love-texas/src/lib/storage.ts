@@ -182,34 +182,70 @@ export async function deleteBook(id: number): Promise<void> {
   const db = await getDB();
   await db.delete('books', id);
   await db.delete('progress', id);
+  // Old in-main-DB cache (if present) is harmless; clear the dedicated cache too.
   if (db.objectStoreNames.contains('paginationCache')) {
     const cacheKeys = await db.getAllKeysFromIndex('paginationCache', 'by-book', id);
     const tx = db.transaction('paginationCache', 'readwrite');
     await Promise.all(cacheKeys.map(key => tx.store.delete(key)));
     await tx.done;
   }
+  await clearPaginationCacheForBook(id);
 }
 
 // --- PAGINATION CACHE ---
+
+let paginationDbPromise: Promise<any> | null = null;
+
+async function getPaginationDB() {
+  if (!paginationDbPromise) {
+    paginationDbPromise = openDB('english-books-pagination-cache', 1, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains('pages')) {
+          const store = db.createObjectStore('pages', { keyPath: 'key' });
+          store.createIndex('by-book', 'bookId', { unique: false });
+        }
+      },
+      blocking() {
+        paginationDbPromise?.then((db: any) => db.close()).catch(() => {});
+        paginationDbPromise = null;
+      },
+      terminated() {
+        paginationDbPromise = null;
+      },
+    });
+  }
+  return paginationDbPromise;
+}
+
 export async function getPaginationCache(key: string): Promise<PaginationCacheEntry | undefined> {
-  const db = await getDB();
-  if (!db.objectStoreNames.contains('paginationCache')) return undefined;
-  return db.get('paginationCache', key);
+  try {
+    const db = await getPaginationDB();
+    return db.get('pages', key);
+  } catch (error) {
+    console.warn('Pagination cache read failed:', error);
+    return undefined;
+  }
 }
 
 export async function savePaginationCache(entry: PaginationCacheEntry): Promise<void> {
-  const db = await getDB();
-  if (!db.objectStoreNames.contains('paginationCache')) return;
-  await db.put('paginationCache', entry);
+  try {
+    const db = await getPaginationDB();
+    await db.put('pages', entry);
+  } catch (error) {
+    console.warn('Pagination cache write failed:', error);
+  }
 }
 
 export async function clearPaginationCacheForBook(bookId: number): Promise<void> {
-  const db = await getDB();
-  if (!db.objectStoreNames.contains('paginationCache')) return;
-  const keys = await db.getAllKeysFromIndex('paginationCache', 'by-book', bookId);
-  const tx = db.transaction('paginationCache', 'readwrite');
-  await Promise.all(keys.map(key => tx.store.delete(key)));
-  await tx.done;
+  try {
+    const db = await getPaginationDB();
+    const keys = await db.getAllKeysFromIndex('pages', 'by-book', bookId);
+    const tx = db.transaction('pages', 'readwrite');
+    await Promise.all(keys.map((key: IDBValidKey) => tx.store.delete(key)));
+    await tx.done;
+  } catch (error) {
+    console.warn('Pagination cache clear failed:', error);
+  }
 }
 
 // --- PROGRESS ---
