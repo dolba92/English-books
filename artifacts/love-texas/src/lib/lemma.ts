@@ -28,6 +28,9 @@ const KNOWN_LEMMAS: Record<string, string> = {
   was: 'be',
   were: 'be',
   being: 'be',
+  been: 'be',
+  had: 'have',
+  has: 'have',
   did: 'do',
   does: 'do',
   doing: 'do',
@@ -88,7 +91,7 @@ const KNOWN_LEMMAS: Record<string, string> = {
 const PROTECTED_WORDS = new Set([
   'this', 'is', 'was', 'has', 'news', 'series', 'species', 'business',
   'thing', 'things', 'string', 'spring', 'morning', 'king', 'sing',
-  'always', 'news', 'series', 'species', 'business', 'status',
+  'always', 'status',
 ]);
 
 const COMMON_BASES = new Set([
@@ -97,6 +100,9 @@ const COMMON_BASES = new Set([
   'learn', 'like', 'live', 'look', 'love', 'move', 'open', 'play',
   'plan', 'rain', 'remember', 'return', 'smile', 'start', 'stop', 'study',
   'talk', 'use', 'wait', 'walk', 'want', 'watch', 'work', 'read',
+  'lean', 'seem', 'stare', 'pick', 'leave', 'pull', 'retire', 'shake',
+  'hold', 'breathe', 'stand', 'turn', 'murmur', 'slur', 'hang', 'threaten',
+  'settle', 'freeze', 'bring', 'take', 'feel', 'find', 'keep', 'dress',
 ]);
 
 function fromKnownSuffix(word: string): string | undefined {
@@ -106,6 +112,7 @@ function fromKnownSuffix(word: string): string | undefined {
     const stem = word.slice(0, -3);
     if (stem.length >= 3 && /(.)\1$/.test(stem)) return stem.slice(0, -1);
     if (COMMON_BASES.has(stem)) return stem;
+    if (COMMON_BASES.has(`${stem}e`)) return `${stem}e`;
   }
 
   if (word.endsWith('ies') && word.length > 5) {
@@ -121,21 +128,30 @@ function fromKnownSuffix(word: string): string | undefined {
   if (word.endsWith('ed') && word.length > 5) {
     const stem = word.slice(0, -2);
     if (COMMON_BASES.has(stem)) return stem;
-    if (/(.)\1$/.test(stem) && COMMON_BASES.has(stem.slice(0, -1))) return stem.slice(0, -1);
-    if (stem.endsWith('v') && COMMON_BASES.has(`${stem}e`)) return `${stem}e`;
+    if (/(.)\1$/.test(stem) && COMMON_BASES.has(stem.slice(0, -1))) {
+      return stem.slice(0, -1);
+    }
+    if (COMMON_BASES.has(`${stem}e`)) return `${stem}e`;
   }
 
-  if (word.endsWith('s') && word.length > 5 && !word.endsWith('ss')) {
+  if (word.endsWith('es') && word.length > 5) {
+    const candidate = word.slice(0, -2);
+    if (COMMON_BASES.has(candidate)) return candidate;
+    const candidateWithE = word.slice(0, -1);
+    if (COMMON_BASES.has(candidateWithE)) return candidateWithE;
+  }
+
+  if (word.endsWith('s') && word.length > 4 && !word.endsWith('ss')) {
     const singular = word.slice(0, -1);
-    if (singular.length >= 4 && COMMON_BASES.has(singular)) return singular;
+    if (singular.length >= 3 && COMMON_BASES.has(singular)) return singular;
   }
 
   return undefined;
 }
 
 /**
- * Conservative local metadata only. Unknown or ambiguous forms stay unchanged.
- * This function never participates in translation requests.
+ * Conservative local metadata only.
+ * Known forms and high-confidence suffixes are normalized to a dictionary form.
  */
 export function getLemma(word: string): string {
   const normalized = word.toLowerCase().replace(/[^a-z'-]/g, '');
