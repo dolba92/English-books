@@ -129,7 +129,7 @@ function WordTooltip({
   state: TooltipState;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
-  onAdd: (word: string, translation: string, lemma: string) => void;
+  onAdd: (word: string, translation: string, lemma: string, lemmaTranslation?: string) => void;
 }) {
   const { word, x, y, info, loading } = state;
   const translation = info?.translation ?? '';
@@ -280,7 +280,7 @@ function WordTooltip({
         <div className="px-3 pb-3">
            <button data-testid="button-add-word" aria-label="Добавить слово в словарь"
             disabled={loading || !translation}
-             onClick={() => onAdd(word, translation, lemma)}
+             onClick={() => onAdd(word, translation, lemma, info?.lemmaTranslation)}
             className="w-full flex items-center justify-center gap-1.5 bg-primary/10 text-primary font-medium py-2 rounded-xl hover:bg-primary/20 transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Plus size={14} /> В словарь
@@ -753,10 +753,28 @@ export function ReaderPage() {
     setTooltip(previous => previous?.word === word ? { ...previous, info, loading: false } : previous);
   };
 
-  const handleAddWord = async (word: string, translation: string, lemma?: string) => {
+  const handleAddWord = async (
+    word: string,
+    translation: string,
+    lemma?: string,
+    lemmaTranslation?: string,
+  ) => {
     const dictionaryWord = lemma && lemma !== word ? lemma : word;
-    await addWordToDictionary(dictionaryWord, translation);
-    toast({ title: 'Добавлено в словарь', description: `"${dictionaryWord}" → ${translation}`, duration: 2000 });
+
+    // Save the dictionary/headword translation, not the contextual inflected
+    // form. Example: "pulling — тянет" is displayed in the reader, but the
+    // dictionary stores "pull — тянуть".
+    const dictionaryTranslation =
+      dictionaryWord !== word && lemmaTranslation?.trim()
+        ? lemmaTranslation.trim()
+        : translation;
+
+    await addWordToDictionary(dictionaryWord, dictionaryTranslation);
+    toast({
+      title: 'Добавлено в словарь',
+      description: `"${dictionaryWord}" → ${dictionaryTranslation}`,
+      duration: 2000,
+    });
     setTooltip(null);
   };
 
