@@ -1,8 +1,10 @@
 /**
- * Fast word lookup with richer Russian dictionary variants.
- * Google and Lingva start together. We show whichever useful result arrives first,
- * but give the second source a very short chance to enrich missing POS/variants.
+ * Word lookup — fast primary translation + richer dictionary variants.
+ * The visible word may be inflected ("leans"), while dictionary variants are
+ * requested for its lemma ("lean").
  */
+
+import { getLemma } from './lemma';
 
 export interface RuGroup {
   pos: string;
@@ -30,11 +32,11 @@ const POS_RU: Record<string, string> = {
 };
 
 function posRu(en: string): string {
-  return POS_RU[String(en || '').toLowerCase()] ?? String(en || '');
+  const key = String(en || '').toLowerCase().trim();
+  return POS_RU[key] ?? (key || 'варианты');
 }
 
-// New prefix deliberately ignores older cached one-translation-only cards.
-const CACHE_PREFIX = 'ltx6-word-';
+const CACHE_PREFIX = 'ltx8-word-';
 
 function readCache(key: string): WordInfo | null {
   try {
@@ -45,34 +47,35 @@ function readCache(key: string): WordInfo | null {
   }
 }
 
-function writeCache(key: string, val: WordInfo) {
+function writeCache(key: string, value: WordInfo) {
   try {
-    sessionStorage.setItem(CACHE_PREFIX + key, JSON.stringify(val));
+    sessionStorage.setItem(CACHE_PREFIX + key, JSON.stringify(value));
   } catch {}
 }
 
-function uniqueWords(words: string[]): string[] {
+function uniqueRussian(words: string[]): string[] {
   const seen = new Set<string>();
   return words
     .map(w => String(w || '').trim())
-    .filter(Boolean)
+    .filter(w => w.length > 1 && /[а-яё]/i.test(w))
     .filter(w => {
-      const k = w.toLowerCase();
-      if (seen.has(k)) return false;
-      seen.add(k);
+      const key = w.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
       return true;
     })
     .slice(0, 12);
 }
 
-function mergeGroups(a: RuGroup[] = [], b: RuGroup[] = []): RuGroup[] {
+function mergeGroups(...sets: RuGroup[][]): RuGroup[] {
   const map = new Map<string, string[]>();
 
-  for (const group of [...a, ...b]) {
-    if (!group?.words?.length) continue;
-    const pos = group.pos || 'варианты';
-    const current = map.get(pos) ?? [];
-    map.set(pos, uniqueWords([...current, ...group.words]));
+  for (const groups of sets) {
+    for (const group of groups || []) {
+      if (!group?.words?.length) continue;
+      const pos = group.pos || 'варианты';
+      map.set(pos, uniqueRussian([...(map.get(pos) ?? []), ...group.words]));
+    }
   }
 
   return [...map.entries()]
@@ -80,17 +83,7 @@ function mergeGroups(a: RuGroup[] = [], b: RuGroup[] = []): RuGroup[] {
     .filter(group => group.words.length > 0);
 }
 
-function mergeInfo(primary: WordInfo, secondary?: WordInfo | null): WordInfo {
-  if (!secondary) return primary;
-  return {
-    word: primary.word,
-    translation: primary.translation || secondary.translation,
-    phonetic: primary.phonetic || secondary.phonetic,
-    groups: mergeGroups(primary.groups, secondary.groups),
-  };
-}
-
-async function fromGoogleGtx(word: string): Promise<WordInfo | null> {
+async function googleLookup(query: string): Promise<WordInfo | null> {
   try {
     const params = new URLSearchParams();
     params.set('client', 'gtx');
@@ -99,18 +92,17 @@ async function fromGoogleGtx(word: string): Promise<WordInfo | null> {
     params.append('dt', 't');
     params.append('dt', 'bd');
     params.append('dt', 'rm');
-    params.set('q', word);
+    params.set('q', query);
 
     const res = await fetch(
       `https://translate.googleapis.com/translate_a/single?${params.toString()}`,
-      { signal: AbortSignal.timeout(3000) },
+      { signal: AbortSignal.timeout(3200) },
     );
     if (!res.ok) return null;
 
     const json = await res.json();
-    const segments: any[] = Array.isArray(json?.[0]) ? json[0] : [];
-    const translation = segments
-      .map((segment: any[]) => typeof segment?.[0] === 'string' ? segment[0] : '')
+    const translation = (Array.isArray(json?.[0]) ? json[0] : [])
+      .map((s: any[]) => typeof s?.[0] === 'string' ? s[0] : '')
       .join('')
       .trim();
 
@@ -122,42 +114,30 @@ async function fromGoogleGtx(word: string): Promise<WordInfo | null> {
     for (const entry of rawGroups) {
       if (!Array.isArray(entry)) continue;
 
-      // Most gtx responses: ["verb", ["чувствовать", ...], ...]
-      let rawPos: any = entry[0];
-      let rawItems: any = entry[1];
-
-      // Some Google response shapes nest the POS label.
-      if (Array.isArray(rawPos)) rawPos = rawPos[0];
-
-      const pos = posRu(typeof rawPos === 'string' ? rawPos : 'варианты');
+      const pos = posRu(typeof entry[0] === 'string' ? entry[0] : '');
+      const items: any[] = Array.isArray(entry[1]) ? entry[1] : [];
       const words: string[] = [];
 
-      if (Array.isArray(rawItems)) {
-        for (const item of rawItems) {
-          if (typeof item === 'string') {
-            words.push(item);
-          } else if (Array.isArray(item)) {
-            if (typeof item[0] === 'string') words.push(item[0]);
-            if (Array.isArray(item[1])) {
-              for (const nested of item[1]) {
-                if (typeof nested === 'string') words.push(nested);
-              }
+      for (const item of items) {
+        if (typeof item === 'string') {
+          words.push(item);
+        } else if (Array.isArray(item)) {
+          if (typeof item[0] === 'string') words.push(item[0]);
+          if (Array.isArray(item[1])) {
+            for (const nested of item[1]) {
+              if (typeof nested === 'string') words.push(nested);
             }
-          } else if (item && typeof item.word === 'string') {
-            words.push(item.word);
           }
+        } else if (item && typeof item.word === 'string') {
+          words.push(item.word);
         }
       }
 
-      const clean = uniqueWords(words).filter(w => /[а-яё]/i.test(w));
+      const clean = uniqueRussian(words);
       if (clean.length) groups.push({ pos, words: clean });
     }
 
-    return {
-      word,
-      translation,
-      groups: mergeGroups(groups),
-    };
+    return { word: query, translation, groups };
   } catch {
     return null;
   }
@@ -168,12 +148,12 @@ const LINGVA_MIRRORS = [
   'https://translate.plausibility.cloud',
 ];
 
-async function fromLingva(word: string): Promise<WordInfo | null> {
+async function lingvaLookup(query: string): Promise<WordInfo | null> {
   for (const mirror of LINGVA_MIRRORS) {
     try {
       const res = await fetch(
-        `${mirror}/api/v1/en/ru/${encodeURIComponent(word)}`,
-        { signal: AbortSignal.timeout(1800) },
+        `${mirror}/api/v1/en/ru/${encodeURIComponent(query)}`,
+        { signal: AbortSignal.timeout(2200) },
       );
       if (!res.ok) continue;
 
@@ -191,10 +171,10 @@ async function fromLingva(word: string): Promise<WordInfo | null> {
         ? json.info.translations
         : [];
 
-      for (const g of rawGroups) {
-        const pos = posRu(g?.type ?? 'варианты');
-        const list: any[] = Array.isArray(g?.list) ? g.list : [];
-        const words = uniqueWords(
+      for (const group of rawGroups) {
+        const pos = posRu(group?.type);
+        const list: any[] = Array.isArray(group?.list) ? group.list : [];
+        const words = uniqueRussian(
           list.map(item =>
             typeof item === 'string'
               ? item
@@ -202,120 +182,126 @@ async function fromLingva(word: string): Promise<WordInfo | null> {
                 ? item.word
                 : '',
           ),
-        ).filter(w => /[а-яё]/i.test(w));
-
+        );
         if (words.length) groups.push({ pos, words });
       }
 
-      return {
-        word,
-        phonetic,
-        translation,
-        groups: mergeGroups(groups),
-      };
+      return { word: query, phonetic, translation, groups };
     } catch {
       // try next mirror
     }
   }
+
   return null;
 }
 
-function isGarbage(s: string): boolean {
-  if (!s) return true;
-  if (/https?:\/\//.test(s)) return true;
-  if (/^[a-z]{2,}\.[a-z]{2,}/i.test(s) && !/[а-яё]/i.test(s)) return true;
-  if (s.length > 120) return true;
-  return false;
+interface MyMemoryResult {
+  translation: string;
+  alternatives: string[];
 }
 
-async function fromMyMemory(word: string): Promise<WordInfo | null> {
+async function myMemoryLookup(query: string): Promise<MyMemoryResult | null> {
   try {
     const res = await fetch(
-      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=en|ru`,
-      { signal: AbortSignal.timeout(4500) },
+      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(query)}&langpair=en|ru`,
+      { signal: AbortSignal.timeout(3200) },
     );
     if (!res.ok) return null;
 
     const json = await res.json();
     if (json?.responseStatus !== 200) return null;
 
-    const raw = String(json?.responseData?.translatedText ?? '').trim();
-    if (isGarbage(raw) || raw.toLowerCase().includes('mymemory warning')) return null;
+    const main = String(json?.responseData?.translatedText ?? '').trim();
+    if (!main || !/[а-яё]/i.test(main)) return null;
 
-    return { word, translation: raw, groups: [] };
+    const alternatives = uniqueRussian(
+      (Array.isArray(json?.matches) ? json.matches : [])
+        .map((match: any) => String(match?.translation ?? '').trim()),
+    );
+
+    return {
+      translation: main,
+      alternatives,
+    };
   } catch {
     return null;
   }
 }
 
-function waitFor<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([
-    promise.then(value => value),
+    promise,
     new Promise<null>(resolve => setTimeout(() => resolve(null), ms)),
   ]);
 }
 
-async function firstUseful(
-  promises: Promise<WordInfo | null>[],
-): Promise<{ result: WordInfo | null; index: number }> {
-  return new Promise(resolve => {
-    let remaining = promises.length;
-    let settled = false;
+export async function lookupWord(surfaceWord: string): Promise<WordInfo> {
+  const surface = surfaceWord.toLowerCase().trim();
+  const lemma = getLemma(surface);
+  const cacheKey = `${surface}|${lemma}`;
 
-    promises.forEach((promise, index) => {
-      promise
-        .then(result => {
-          if (settled) return;
-          if (result?.translation) {
-            settled = true;
-            resolve({ result, index });
-            return;
-          }
-          remaining -= 1;
-          if (remaining === 0) resolve({ result: null, index: -1 });
-        })
-        .catch(() => {
-          if (settled) return;
-          remaining -= 1;
-          if (remaining === 0) resolve({ result: null, index: -1 });
-        });
-    });
-  });
-}
+  const empty: WordInfo = { word: surface, translation: '', groups: [] };
+  if (!surface || surface.length < 2) return empty;
 
-export async function lookupWord(word: string): Promise<WordInfo> {
-  const key = word.toLowerCase().trim();
-  const empty: WordInfo = { word: key, translation: '', groups: [] };
-
-  if (!key || key.length < 2) return empty;
-
-  const cached = readCache(key);
+  const cached = readCache(cacheKey);
   if (cached?.translation) return cached;
 
-  // Start the two useful dictionary sources at the same time.
-  const googlePromise = fromGoogleGtx(key);
-  const lingvaPromise = fromLingva(key);
-  const sources = [googlePromise, lingvaPromise];
+  // Surface translation is useful for forms like "leans" -> "наклоняется".
+  // Lemma lookup is useful for dictionary meanings/parts of speech.
+  const surfaceGooglePromise = googleLookup(surface);
+  const lemmaGooglePromise =
+    lemma === surface ? surfaceGooglePromise : googleLookup(lemma);
+  const lingvaPromise = lingvaLookup(lemma);
+  const memoryPromise = myMemoryLookup(lemma);
 
-  const { result: first, index } = await firstUseful(sources);
+  const surfaceGoogle = await withTimeout(surfaceGooglePromise, 1800);
+  const lemmaGoogle = await withTimeout(lemmaGooglePromise, 1800);
 
-  if (first) {
-    let final = first;
+  let translation =
+    surfaceGoogle?.translation ||
+    lemmaGoogle?.translation ||
+    '';
 
-    // If the fastest source returned only one translation, give the other
-    // source a SHORT chance to add POS buttons and alternative meanings.
-    if (first.groups.length === 0) {
-      const other = await waitFor(sources[index === 0 ? 1 : 0], 700);
-      if (other) final = mergeInfo(first, other);
-    }
+  let phonetic = surfaceGoogle?.phonetic || lemmaGoogle?.phonetic;
+  let groups = mergeGroups(
+    surfaceGoogle?.groups ?? [],
+    lemmaGoogle?.groups ?? [],
+  );
 
-    writeCache(key, final);
-    return final;
+  // Give richer dictionary sources only a short enrichment window.
+  const [lingva, memory] = await Promise.all([
+    withTimeout(lingvaPromise, groups.length ? 250 : 850),
+    withTimeout(memoryPromise, groups.length ? 250 : 850),
+  ]);
+
+  if (!translation) {
+    translation =
+      lingva?.translation ||
+      memory?.translation ||
+      '';
   }
 
-  const fallback = (await fromMyMemory(key)) ?? empty;
-  if (fallback.translation) writeCache(key, fallback);
-  return fallback;
+  phonetic = phonetic || lingva?.phonetic;
+
+  groups = mergeGroups(groups, lingva?.groups ?? []);
+
+  if (memory?.alternatives?.length) {
+    groups = mergeGroups(groups, [
+      { pos: 'варианты', words: memory.alternatives },
+    ]);
+  }
+
+  // If every dictionary source returned only the main translation, still keep
+  // a valid card rather than inventing synonyms.
+  const result: WordInfo = {
+    word: surface,
+    translation,
+    phonetic,
+    groups,
+  };
+
+  if (result.translation) writeCache(cacheKey, result);
+  return result;
 }
 
 /** Translate a full sentence to Russian */
@@ -334,6 +320,7 @@ export async function translateSentence(text: string): Promise<string> {
         { signal: AbortSignal.timeout(3500) },
       );
       if (!res.ok) return '';
+
       const json = await res.json();
       return (json?.[0] ?? [])
         .map((s: any[]) => s?.[0] ?? '')
@@ -348,9 +335,10 @@ export async function translateSentence(text: string): Promise<string> {
     try {
       const res = await fetch(
         `${LINGVA_MIRRORS[0]}/api/v1/en/ru/${encodeURIComponent(text)}`,
-        { signal: AbortSignal.timeout(3000) },
+        { signal: AbortSignal.timeout(2800) },
       );
       if (!res.ok) return '';
+
       const json = await res.json();
       return String(json?.translation ?? '').trim();
     } catch {
@@ -358,30 +346,21 @@ export async function translateSentence(text: string): Promise<string> {
     }
   })();
 
-  const first = await new Promise<string>(resolve => {
+  return new Promise<string>((resolve, reject) => {
     let remaining = 2;
-    for (const p of [google, lingva]) {
-      p.then(value => {
-        if (value) resolve(value);
-        else if (--remaining === 0) resolve('');
-      }).catch(() => {
-        if (--remaining === 0) resolve('');
-      });
+
+    for (const promise of [google, lingva]) {
+      promise
+        .then(value => {
+          if (value) {
+            resolve(value);
+          } else if (--remaining === 0) {
+            reject(new Error('no result'));
+          }
+        })
+        .catch(() => {
+          if (--remaining === 0) reject(new Error('no result'));
+        });
     }
   });
-
-  if (first) return first;
-
-  const res = await fetch(
-    `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|ru`,
-    { signal: AbortSignal.timeout(6000) },
-  );
-  if (!res.ok) throw new Error('translate failed');
-
-  const json = await res.json();
-  const raw = String(json?.responseData?.translatedText ?? '').trim();
-  if (!raw || json?.responseStatus !== 200 || raw.toLowerCase().includes('mymemory warning')) {
-    throw new Error('no result');
-  }
-  return raw;
 }
