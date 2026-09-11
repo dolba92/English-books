@@ -17,6 +17,8 @@ export interface WordInfo {
   groups: RuGroup[];
   lemma?: string;
   lemmaTranslation?: string;
+  learningWord?: string;
+  learningTranslations?: string[];
   preferredPos?: string;
 }
 
@@ -38,7 +40,7 @@ function posRu(en: string): string {
   return POS_RU[key] ?? (key || 'варианты');
 }
 
-const CACHE_PREFIX = 'ltx13-word-';
+const CACHE_PREFIX = 'ltx15-word-'
 
 function readCache(key: string): WordInfo | null {
   try {
@@ -83,6 +85,32 @@ function mergeGroups(...sets: RuGroup[][]): RuGroup[] {
   return [...map.entries()]
     .map(([pos, words]) => ({ pos, words }))
     .filter(group => group.words.length > 0);
+}
+
+
+async function googleSimpleTranslation(query: string): Promise<string> {
+  try {
+    const params = new URLSearchParams();
+    params.set('client', 'gtx');
+    params.set('sl', 'en');
+    params.set('tl', 'ru');
+    params.append('dt', 't');
+    params.set('q', query);
+
+    const res = await fetch(
+      `https://translate.googleapis.com/translate_a/single?${params.toString()}`,
+      { signal: AbortSignal.timeout(2500) },
+    );
+    if (!res.ok) return '';
+
+    const json = await res.json();
+    return (Array.isArray(json?.[0]) ? json[0] : [])
+      .map((s: any[]) => typeof s?.[0] === 'string' ? s[0] : '')
+      .join('')
+      .trim();
+  } catch {
+    return '';
+  }
 }
 
 async function googleLookup(query: string): Promise<WordInfo | null> {
@@ -234,16 +262,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 }
 
 
-const COMMON_CONTEXTUAL_VERBS: Record<string, string> = {
-  murmurs: 'бормочет',
-  leans: 'наклоняется',
-  seeps: 'просачивается',
-  slurs: 'невнятно произносит',
-  means: 'означает',
-  trying: 'пытаясь',
-  standing: 'стоя',
-  staring: 'глядя',
-};
+const COMMON_CONTEXTUAL_VERBS: Record<string, string> = {};
 
 
 function findPreferredGroup(groups: RuGroup[], preferredPos?: string): RuGroup | undefined {
@@ -384,14 +403,21 @@ export async function lookupWord(surfaceWord: string, preferredPos?: string): Pr
   const lingvaPromise = lingvaLookup(lemma);
   const memoryPromise = myMemoryLookup(lemma);
 
+  // Ask Google for a form that naturally produces a Russian dictionary form.
+  // "to stand" -> "стоять", "to murmur" -> "бормотать",
+  // "to replace" -> "заменить/заменять".
+  const baseFormQuery =
+    normalizedPreferredPos === 'verb'
+      ? `to ${lemma}`
+      : (hasConfidentLemma ? lemma : '');
+
+  const baseFormTranslationPromise =
+    baseFormQuery
+      ? googleSimpleTranslation(baseFormQuery)
+      : Promise.resolve('');
+
   const surfaceGoogle = await withTimeout(surfaceGooglePromise, 1800);
   const lemmaGoogle = await withTimeout(lemmaGooglePromise, 1800);
-
-  let translation =
-    COMMON_CONTEXTUAL_VERBS[surface] ||
-    surfaceGoogle?.translation ||
-    lemmaGoogle?.translation ||
-    '';
 
   let phonetic = surfaceGoogle?.phonetic || lemmaGoogle?.phonetic;
   let groups = mergeGroups(
@@ -400,54 +426,45 @@ export async function lookupWord(surfaceWord: string, preferredPos?: string): Pr
   );
 
   // Give richer dictionary sources only a short enrichment window.
-  const [lingva, memory] = await Promise.all([
+  const [lingva, memory, baseFormTranslation] = await Promise.all([
     withTimeout(lingvaPromise, groups.length ? 250 : 850),
     withTimeout(memoryPromise, groups.length ? 250 : 850),
+    withTimeout(baseFormTranslationPromise, 1200),
   ]);
 
-  if (!translation) {
-    translation =
-      lingva?.translation ||
-      memory?.translation ||
-      '';
-  }
-
   phonetic = phonetic || lingva?.phonetic;
-
   groups = mergeGroups(groups, lingva?.groups ?? []);
 
-  // If every real dictionary source returned only the main translation,
-  // keep a clean one-line card rather than showing unrelated translation-memory junk.
-
-  // If every dictionary source returned only the main translation, still keep
-  // a valid card rather than inventing synonyms.
   const preferredGroup = findPreferredGroup(groups, normalizedPreferredPos);
 
-  // For dictionary saving, prefer the translation belonging to the detected
-  // part of speech. This fixes cases such as:
-  // murmurs -> murmur -> бормотать (not noun "ропот")
-  // trying -> try -> пытаться (not adjective "пытливый")
-  const lemmaTranslation =
-    lemma !== surface
-      ? (
-          preferredGroup?.words?.[0] ||
-          lemmaGoogle?.translation ||
-          lingva?.translation ||
-          memory?.translation ||
-          ''
-        )
-      : (
-          preferredGroup?.words?.[0] ||
-          translation
-        );
+  // Main rule: what the learner sees and saves should already be a dictionary
+  // form in Russian. For verbs the explicit "to + lemma" query forces an
+  // infinitive. If that service fails, dictionary-group variants are already
+  // infinitives and are the next-best choice.
+  const dictionaryTranslation =
+    baseFormTranslation ||
+    preferredGroup?.words?.[0] ||
+    lemmaGoogle?.translation ||
+    lingva?.translation ||
+    memory?.translation ||
+    surfaceGoogle?.translation ||
+    '';
+
+  const learningWord = hasConfidentLemma ? lemma : surface;
+  const learningTranslations = uniqueRussian([
+    dictionaryTranslation,
+    ...(preferredGroup?.words ?? []),
+  ]).slice(0, 8);
 
   const result: WordInfo = {
     word: surface,
-    translation,
+    translation: dictionaryTranslation,
     phonetic,
     groups,
     lemma: hasConfidentLemma ? lemma : undefined,
-    lemmaTranslation: hasConfidentLemma ? lemmaTranslation : undefined,
+    lemmaTranslation: dictionaryTranslation || undefined,
+    learningWord,
+    learningTranslations,
     preferredPos: normalizedPreferredPos || undefined,
   };
 
