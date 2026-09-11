@@ -1,4 +1,4 @@
-const KNOWN_LEMMAS: Record<string, string> = {
+cconst KNOWN_LEMMAS: Record<string, string> = {
   talking: 'talk',
   talked: 'talk',
   faces: 'face',
@@ -86,6 +86,9 @@ const KNOWN_LEMMAS: Record<string, string> = {
   woke: 'wake',
   wore: 'wear',
   won: 'win',
+  means: 'mean',
+  translations: 'translation',
+  trying: 'try',
 };
 
 const PROTECTED_WORDS = new Set([
@@ -105,6 +108,8 @@ const COMMON_BASES = new Set([
   'settle', 'freeze', 'bring', 'take', 'feel', 'find', 'keep', 'dress',
   'seep', 'splatter', 'excuse', 'say', 'smile', 'freeze', 'tear',
   'try', 'understand', 'recruit', 'discover', 'search', 'reach', 'knock',
+  'mean', 'translate', 'translation', 'guardian', 'language', 'parent',
+  'eye', 'hand', 'word', 'place', 'thing', 'tear', 'lamp', 'arm', 'boot',
 ]);
 
 function fromKnownSuffix(word: string): string | undefined {
@@ -152,7 +157,19 @@ function fromKnownSuffix(word: string): string | undefined {
 
   if (word.endsWith('s') && word.length > 4 && !word.endsWith('ss')) {
     const singular = word.slice(0, -1);
+
+    // Prefer known/common dictionary bases.
     if (singular.length >= 3 && COMMON_BASES.has(singular)) return singular;
+
+    // Conservative noun plural fallback for longer alphabetic words.
+    // Avoid verb-like 3rd-person forms when the base is a known verb.
+    if (
+      singular.length >= 5 &&
+      /^[a-z'-]+$/.test(singular) &&
+      !COMMON_BASES.has(singular)
+    ) {
+      return singular;
+    }
   }
 
   return undefined;
