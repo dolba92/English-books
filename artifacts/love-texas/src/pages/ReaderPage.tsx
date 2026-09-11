@@ -152,7 +152,7 @@ function WordTooltip({
     const popup = popupRef.current;
     if (!popup) return;
     const margin = 12;
-    const footerReserve = 44;
+    const footerReserve = 72;
     const rect = popup.getBoundingClientRect();
     const safeBottom = window.innerHeight - footerReserve - margin;
     const enoughBelow = safeBottom - y >= rect.height + margin;
@@ -180,7 +180,7 @@ function WordTooltip({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-       <div className="bg-card border border-border shadow-2xl rounded-2xl w-[min(18rem,calc(100vw-2rem))] max-h-[calc(100dvh-4.5rem)] overflow-y-auto">
+       <div className="bg-card border border-border shadow-2xl rounded-2xl w-[min(18rem,calc(100vw-2rem))] max-h-[calc(100dvh-7rem)] overflow-y-auto">
         {/* Header: word + speak button */}
         <div className="flex items-center gap-2 px-4 pt-4 pb-1">
           <span className="flex-1 font-bold text-xl text-foreground leading-tight">{word}</span>
@@ -457,7 +457,7 @@ export function ReaderPage() {
     const hintReserve = showHint ? (isMobileLayout ? 112 : 84) : 0;
     // Header = 56px, footer = 36px. Keep only a small safety gap: the old
     // estimator reserved far too much room and left half-empty EPUB pages.
-    const contentHeight = Math.max(180, viewportHeight - 56 - 36 - verticalPadding - hintReserve - 8);
+    const contentHeight = Math.max(180, viewportHeight - 56 - 44 - verticalPadding - hintReserve - 24);
     const fontCssForMeasure = getFontCss(settings.fontFamily);
     const illustrationReserve = settings.showIllustrations ? Math.min(viewportHeight * 0.38, 300) : 0;
     const { pages: measuredPages } = paginateBookContinuousMeasured(book.content, {
@@ -827,7 +827,7 @@ export function ReaderPage() {
                                 if (!clean || clean.length < 2) return <span key={wi}>{token}</span>;
                                 return (
                                   <span key={wi}
-                                    className="hover:bg-primary/20 rounded px-[1px] transition-colors cursor-default"
+                                    className="hover:bg-primary/20 rounded transition-colors cursor-default"
                                     onMouseEnter={e => handleWordMouseEnter(e, clean)}
                                     onMouseLeave={handleWordMouseLeave}
                                     onClick={e => { e.stopPropagation(); handleWordClick(e, clean); }}>
@@ -837,7 +837,7 @@ export function ReaderPage() {
                               })}
                               {punct && (
                                 <button data-testid={`button-translate-sentence-${currentPageIdx}-${bi}-${si}`} onClick={() => handleSentenceClick(sentence)} title="Перевести предложение"
-                                  className={`inline font-bold transition-colors rounded px-[1px] cursor-pointer ${isSelected ? 'text-primary' : 'text-primary/50 hover:text-primary'}`}>
+                                  className={`inline font-bold transition-colors rounded cursor-pointer ${isSelected ? 'text-primary' : 'text-primary/50 hover:text-primary'}`}>
                                   {punct}
                                 </button>
                               )}
