@@ -33,6 +33,12 @@ export interface DictionaryWord {
   translation: string;
   transcription?: string;
   partOfSpeech?: string;
+  sourceForm?: string;
+  lemma?: string;
+  translations?: string[];
+  contextSentence?: string;
+  bookId?: number;
+  bookTitle?: string;
   dateAdded: number; // timestamp
   errorCount: number;
   // SRS (Spaced Repetition System) fields
@@ -265,26 +271,68 @@ export async function getAllProgress(): Promise<BookProgress[]> {
 }
 
 // --- DICTIONARY ---
-export async function addWordToDictionary(word: string, translation: string, transcription?: string, partOfSpeech?: string): Promise<number> {
+export interface AddDictionaryWordOptions {
+  transcription?: string;
+  partOfSpeech?: string;
+  sourceForm?: string;
+  lemma?: string;
+  translations?: string[];
+  contextSentence?: string;
+  bookId?: number;
+  bookTitle?: string;
+}
+
+export async function addWordToDictionary(
+  word: string,
+  translation: string,
+  options: AddDictionaryWordOptions = {},
+): Promise<number> {
   const db = await getDB();
-  
-  // Check if word exists (basic check, could be case sensitive)
-  const existing = await db.getFromIndex('dictionary', 'by-word', word.toLowerCase());
+  const normalizedWord = word.toLowerCase().trim();
+
+  const existing = await db.getFromIndex('dictionary', 'by-word', normalizedWord);
   if (existing && existing.id) {
-    return existing.id; // already added
+    const mergedTranslations = Array.from(new Set([
+      ...(existing.translations ?? existing.translation.split(/[;,]/).map(v => v.trim()).filter(Boolean)),
+      ...(options.translations ?? translation.split(/[;,]/).map(v => v.trim()).filter(Boolean)),
+    ]));
+
+    await db.put('dictionary', {
+      ...existing,
+      translation: mergedTranslations.join('; '),
+      translations: mergedTranslations,
+      sourceForm: options.sourceForm ?? existing.sourceForm,
+      lemma: options.lemma ?? existing.lemma ?? normalizedWord,
+      contextSentence: options.contextSentence ?? existing.contextSentence,
+      bookId: options.bookId ?? existing.bookId,
+      bookTitle: options.bookTitle ?? existing.bookTitle,
+      transcription: options.transcription ?? existing.transcription,
+      partOfSpeech: options.partOfSpeech ?? existing.partOfSpeech,
+    });
+    return existing.id;
   }
 
+  const selectedTranslations =
+    options.translations?.filter(Boolean) ??
+    translation.split(/[;,]/).map(v => v.trim()).filter(Boolean);
+
   const newWord: Omit<DictionaryWord, 'id'> = {
-    word: word.toLowerCase(),
-    translation,
-    transcription,
-    partOfSpeech,
+    word: normalizedWord,
+    translation: selectedTranslations.join('; ') || translation,
+    transcription: options.transcription,
+    partOfSpeech: options.partOfSpeech,
+    sourceForm: options.sourceForm,
+    lemma: options.lemma ?? normalizedWord,
+    translations: selectedTranslations,
+    contextSentence: options.contextSentence,
+    bookId: options.bookId,
+    bookTitle: options.bookTitle,
     dateAdded: Date.now(),
     errorCount: 0
   };
 
   const id = await db.put('dictionary', newWord as DictionaryWord);
-  
+
   const stats = await getStats();
   if (stats) {
     await updateStats({ totalWordsAdded: stats.totalWordsAdded + 1 });
