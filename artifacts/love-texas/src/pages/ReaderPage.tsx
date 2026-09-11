@@ -5,7 +5,6 @@ import { paginateBook, paginateBookContinuousMeasured, ContinuousPageBlock } fro
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { FONTS, getFontCss } from '@/lib/fonts';
 import { lookupWord, translateSentence, WordInfo, RuGroup } from '@/lib/wordlookup';
-import { getLemma } from '@/lib/lemma';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, X, Plus,
   Loader2, List, BookOpen, Languages, Microscope, Volume2, Maximize2, Minimize2, Type
@@ -238,7 +237,7 @@ function WordTooltip({
   const { word, x, y, info, loading } = state;
   const translation = info?.translation ?? '';
   const groups: RuGroup[] = info?.groups ?? [];
-  const lemma = getLemma(word);
+  const lemma = info?.lemma;
   const [selectedGroup, setSelectedGroup] = React.useState(0);
   const popupRef = React.useRef<HTMLDivElement>(null);
   const [popupStyle, setPopupStyle] = React.useState<React.CSSProperties>({
