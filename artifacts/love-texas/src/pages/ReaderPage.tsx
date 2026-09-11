@@ -223,6 +223,7 @@ interface TooltipState {
   x: number; y: number;
   info: WordInfo | null;
   loading: boolean;
+  sentence: string;
   preferredPos?: 'verb' | 'noun' | 'adjective' | 'adverb';
 }
 
@@ -232,13 +233,23 @@ function WordTooltip({
   state: TooltipState;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
-  onAdd: (word: string, translation: string, lemma: string, lemmaTranslation?: string) => void;
+  onAdd: (payload: {
+    sourceForm: string;
+    learningWord: string;
+    translations: string[];
+    transcription?: string;
+    partOfSpeech?: string;
+    sentence: string;
+  }) => void;
 }) {
   const { word, x, y, info, loading } = state;
   const translation = info?.translation ?? '';
   const groups: RuGroup[] = info?.groups ?? [];
   const lemma = info?.lemma;
+  const learningWord = info?.learningWord || lemma || word;
   const [selectedGroup, setSelectedGroup] = React.useState(0);
+  const [choosingTranslations, setChoosingTranslations] = React.useState(false);
+  const [selectedTranslations, setSelectedTranslations] = React.useState<string[]>([]);
   const popupRef = React.useRef<HTMLDivElement>(null);
   const [popupStyle, setPopupStyle] = React.useState<React.CSSProperties>({
     left: Math.max(12, Math.min(window.innerWidth - 300, x - 144)),
@@ -285,6 +296,38 @@ function WordTooltip({
   };
   const activeGroup = groups[selectedGroup] ?? groups[0];
   const activeVariants = activeGroup ? cleanVariants(activeGroup.words) : [];
+
+  const candidateTranslations = React.useMemo(() => {
+    const raw = [
+      ...(info?.learningTranslations ?? []),
+      translation,
+      ...activeVariants,
+    ];
+    const seen = new Set<string>();
+    return raw
+      .map(value => value.trim())
+      .filter(value => value.length > 1 && isCyrillic(value))
+      .filter(value => {
+        const key = value.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 10);
+  }, [info?.learningTranslations, translation, activeVariants.join('|')]);
+
+  React.useEffect(() => {
+    setChoosingTranslations(false);
+    setSelectedTranslations(candidateTranslations.slice(0, Math.min(3, candidateTranslations.length)));
+  }, [word, learningWord, candidateTranslations.join('|')]);
+
+  const toggleTranslation = (value: string) => {
+    setSelectedTranslations(current =>
+      current.includes(value)
+        ? current.filter(item => item !== value)
+        : [...current, value],
+    );
+  };
 
   React.useLayoutEffect(() => {
     const popup = popupRef.current;
@@ -399,15 +442,70 @@ function WordTooltip({
           )}
         </div>
 
-        {/* Add to dictionary */}
+        {/* Linga-like save flow: choose meanings, save the base form */}
         <div className="px-3 pb-3">
-           <button data-testid="button-add-word" aria-label="Добавить слово в словарь"
-            disabled={loading || !translation}
-             onClick={() => onAdd(word, translation, lemma, info?.lemmaTranslation)}
-            className="w-full flex items-center justify-center gap-1.5 bg-primary/10 text-primary font-medium py-2 rounded-xl hover:bg-primary/20 transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <Plus size={14} /> В словарь
-          </button>
+          {!choosingTranslations ? (
+            <button
+              data-testid="button-add-word"
+              aria-label="Добавить слово в словарь"
+              disabled={loading || !translation}
+              onClick={() => setChoosingTranslations(true)}
+              className="w-full flex items-center justify-center gap-1.5 bg-primary/10 text-primary font-medium py-2 rounded-xl hover:bg-primary/20 transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Plus size={14} /> В словарь
+            </button>
+          ) : (
+            <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
+              <div>
+                <p className="text-xs text-muted-foreground">В обучение пойдёт</p>
+                <p className="font-semibold text-sm">{learningWord}</p>
+              </div>
+              <p className="text-xs font-medium text-foreground">Выберите переводы</p>
+              <div className="flex flex-wrap gap-1.5">
+                {candidateTranslations.map(value => {
+                  const selected = selectedTranslations.includes(value);
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={e => { e.stopPropagation(); toggleTranslation(value); }}
+                      className={`rounded-full px-2.5 py-1 text-xs border transition-colors ${
+                        selected
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-card text-foreground/80 border-border hover:border-primary/50'
+                      }`}
+                    >
+                      {value}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setChoosingTranslations(false)}
+                  className="flex-1 py-2 rounded-lg bg-muted text-muted-foreground text-sm"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  disabled={selectedTranslations.length === 0}
+                  onClick={() => onAdd({
+                    sourceForm: word,
+                    learningWord,
+                    translations: selectedTranslations,
+                    transcription: info?.phonetic,
+                    partOfSpeech: activeGroup?.pos,
+                    sentence: state.sentence,
+                  })}
+                  className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40"
+                >
+                  Добавить
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </motion.div>
@@ -856,7 +954,7 @@ export function ReaderPage() {
     const preferredPos = inferPreferredPos(sentence, rawWord);
 
     hoverTimeoutRef.current = setTimeout(async () => {
-      setTooltip({ word, x, y, info: null, loading: true, preferredPos });
+      setTooltip({ word, x, y, info: null, loading: true, sentence, preferredPos });
       const info = await lookupWord(word, preferredPos);
       setTooltip(prev => prev?.word === word ? { ...prev, info, loading: false } : prev);
     }, 400);
@@ -880,33 +978,39 @@ export function ReaderPage() {
       y: rect.top - 8,
       info: null,
       loading: true,
+      sentence,
       preferredPos,
     });
     const info = await lookupWord(word, preferredPos);
     setTooltip(previous => previous?.word === word ? { ...previous, info, loading: false } : previous);
   };
 
-  const handleAddWord = async (
-    word: string,
-    translation: string,
-    lemma?: string,
-    lemmaTranslation?: string,
-  ) => {
-    const dictionaryWord = lemma && lemma !== word ? lemma : word;
+  const handleAddWord = async (payload: {
+    sourceForm: string;
+    learningWord: string;
+    translations: string[];
+    transcription?: string;
+    partOfSpeech?: string;
+    sentence: string;
+  }) => {
+    const selected = payload.translations.filter(Boolean);
+    const translation = selected.join('; ');
 
-    // Save the dictionary/headword translation, not the contextual inflected
-    // form. Example: "pulling — тянет" is displayed in the reader, but the
-    // dictionary stores "pull — тянуть".
-    const dictionaryTranslation =
-      dictionaryWord !== word && lemmaTranslation?.trim()
-        ? lemmaTranslation.trim()
-        : translation;
+    await addWordToDictionary(payload.learningWord, translation, {
+      sourceForm: payload.sourceForm,
+      lemma: payload.learningWord,
+      translations: selected,
+      transcription: payload.transcription,
+      partOfSpeech: payload.partOfSpeech,
+      contextSentence: payload.sentence.trim(),
+      bookId: book?.id,
+      bookTitle: book?.title,
+    });
 
-    await addWordToDictionary(dictionaryWord, dictionaryTranslation);
     toast({
       title: 'Добавлено в словарь',
-      description: `"${dictionaryWord}" → ${dictionaryTranslation}`,
-      duration: 2000,
+      description: `"${payload.learningWord}" → ${translation}`,
+      duration: 2200,
     });
     setTooltip(null);
   };
