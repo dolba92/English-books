@@ -4,7 +4,6 @@
  * requested for its lemma ("lean").
  */
 
-import { getLemma } from './lemma';
 
 export interface RuGroup {
   pos: string;
@@ -39,7 +38,7 @@ function posRu(en: string): string {
   return POS_RU[key] ?? (key || 'варианты');
 }
 
-const CACHE_PREFIX = 'ltx12-word-';
+const CACHE_PREFIX = 'ltx13-word-';
 
 function readCache(key: string): WordInfo | null {
   try {
@@ -261,11 +260,115 @@ function findPreferredGroup(groups: RuGroup[], preferredPos?: string): RuGroup |
   });
 }
 
+
+function deriveConfidentLemma(
+  surface: string,
+  preferredPos?: string,
+): string | undefined {
+  const word = surface.toLowerCase().replace(/[^a-z'-]/g, '');
+  if (!word) return undefined;
+
+  const irregular: Record<string, string> = {
+    am: 'be', is: 'be', are: 'be', was: 'be', were: 'be',
+    been: 'be', being: 'be',
+    has: 'have', had: 'have',
+    does: 'do', did: 'do', doing: 'do',
+    went: 'go', gone: 'go',
+    saw: 'see', seen: 'see',
+    said: 'say',
+    made: 'make',
+    took: 'take', taken: 'take',
+    came: 'come',
+    ran: 'run',
+    wrote: 'write', written: 'write',
+    spoke: 'speak', spoken: 'speak',
+    thought: 'think',
+    brought: 'bring',
+    bought: 'buy',
+    caught: 'catch',
+    taught: 'teach',
+    knew: 'know',
+    told: 'tell',
+    found: 'find',
+    gave: 'give',
+    got: 'get',
+    felt: 'feel',
+    left: 'leave',
+    kept: 'keep',
+    held: 'hold',
+    lost: 'lose',
+    met: 'meet',
+  };
+  if (irregular[word]) return irregular[word];
+
+  // -ing is usually safe once the sentence classifier says "verb".
+  if (preferredPos === 'verb' && word.endsWith('ing') && word.length > 5) {
+    const stem = word.slice(0, -3);
+
+    // trying -> try
+    if (stem.endsWith('y')) return stem;
+
+    // making -> make, staring -> stare
+    if (/(mak|tak|giv|hav|mov|leav|st(ar|ir)|us|writ)$/.test(stem)) {
+      return `${stem}e`;
+    }
+
+    // running -> run, stopping -> stop
+    if (/(.)\1$/.test(stem)) return stem.slice(0, -1);
+
+    // pulling -> pull, standing -> stand
+    return stem;
+  }
+
+  // -ed once context says verb.
+  if (preferredPos === 'verb' && word.endsWith('ed') && word.length > 4) {
+    const stem = word.slice(0, -2);
+    if (/(.)\1$/.test(stem)) return stem.slice(0, -1);
+    if (/(mov|lov|us|clos|chang|arriv)$/.test(stem)) return `${stem}e`;
+    return stem;
+  }
+
+  // Ambiguous -s forms are normalized ONLY because context already decided POS.
+  if ((preferredPos === 'verb' || preferredPos === 'noun') && word.endsWith('s') && word.length > 3) {
+    if (word.endsWith('ies') && word.length > 4) {
+      return `${word.slice(0, -3)}y`;
+    }
+
+    if (preferredPos === 'verb') {
+      // says -> say
+      if (word === 'says') return 'say';
+
+      // leaves -> leave, uses -> use
+      if (/(aves|uses|moves|loves|gives|takes|makes)$/.test(word)) {
+        return word.slice(0, -1);
+      }
+
+      // watches -> watch, passes -> pass
+      if (/(ches|shes|sses|xes|zes)$/.test(word)) {
+        return word.slice(0, -2);
+      }
+
+      // means -> mean, murmurs -> murmur, leans -> lean
+      return word.slice(0, -1);
+    }
+
+    if (preferredPos === 'noun') {
+      if (/(ches|shes|sses|xes|zes)$/.test(word)) {
+        return word.slice(0, -2);
+      }
+      return word.slice(0, -1);
+    }
+  }
+
+  return undefined;
+}
+
 export async function lookupWord(surfaceWord: string, preferredPos?: string): Promise<WordInfo> {
   const surface = surfaceWord.toLowerCase().trim();
-  const lemma = getLemma(surface);
   const normalizedPreferredPos = preferredPos?.toLowerCase().trim() || '';
-  const cacheKey = `${surface}|${lemma}|${normalizedPreferredPos}`;
+  const lemma = deriveConfidentLemma(surface, normalizedPreferredPos) || surface;
+  const hasConfidentLemma = lemma !== surface;
+  const cacheKey = `${surface}|${hasConfidentLemma ? lemma : ''}|${normalizedPreferredPos}`;
 
   const empty: WordInfo = { word: surface, translation: '', groups: [] };
   if (!surface || surface.length < 2) return empty;
@@ -343,8 +446,8 @@ export async function lookupWord(surfaceWord: string, preferredPos?: string): Pr
     translation,
     phonetic,
     groups,
-    lemma,
-    lemmaTranslation,
+    lemma: hasConfidentLemma ? lemma : undefined,
+    lemmaTranslation: hasConfidentLemma ? lemmaTranslation : undefined,
     preferredPos: normalizedPreferredPos || undefined,
   };
 
