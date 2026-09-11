@@ -116,11 +116,80 @@ const PAGINATION_CACHE_VERSION = 1;
 
 
 // ── Word Tooltip ─────────────────────────────────────────────────────────────
+
+function inferPreferredPos(sentence: string, rawWord: string): 'verb' | 'noun' | 'adjective' | 'adverb' | undefined {
+  const tokens = sentence
+    .replace(/[“”‘’"«»()[\]{}—–….,!?;:]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const target = rawWord.toLowerCase().replace(/[^a-z'-]/g, '');
+  const index = tokens.findIndex(token => token.toLowerCase().replace(/[^a-z'-]/g, '') === target);
+  if (index < 0) return undefined;
+
+  const prev = (tokens[index - 1] || '').toLowerCase().replace(/[^a-z'-]/g, '');
+  const next = (tokens[index + 1] || '').toLowerCase().replace(/[^a-z'-]/g, '');
+
+  const determiners = new Set([
+    'a','an','the','this','that','these','those','my','your','his','her','its','our','their',
+    'some','any','each','every','no','another','one','two','three','many','few','several',
+  ]);
+  const subjectPronouns = new Set(['i','you','he','she','it','we','they']);
+  const auxiliaries = new Set([
+    'am','is','are','was','were','be','been','being',
+    'have','has','had','do','does','did',
+    'can','could','will','would','shall','should','may','might','must',
+  ]);
+
+  // Strong verb morphology / constructions.
+  if (target.endsWith('ing')) {
+    if (determiners.has(prev)) return 'noun';
+    return 'verb';
+  }
+
+  if (target.endsWith('ed')) {
+    if (auxiliaries.has(prev)) return 'verb';
+    return 'verb';
+  }
+
+  // Third-person singular verb: "Thomas murmurs", "Dad leans", "It seeps".
+  // Possessive/determiner before an -s word is much more likely a plural noun:
+  // "their faces", "the books".
+  if (target.endsWith('s') && !target.endsWith('ss')) {
+    if (determiners.has(prev)) return 'noun';
+    if (subjectPronouns.has(prev)) return 'verb';
+
+    // A capitalized token immediately before usually acts as a subject name.
+    const rawPrev = tokens[index - 1] || '';
+    if (/^[A-Z][A-Za-z'-]*$/.test(rawPrev)) return 'verb';
+  }
+
+  // Infinitive after "to".
+  if (prev === 'to') return 'verb';
+
+  // Copula + -y/-ful/-ous/-ive etc. is commonly adjective.
+  if (['is','are','was','were','seems','seemed','looks','looked'].includes(prev)) {
+    if (/(y|ful|ous|ive|al|ic|able|ible|less)$/.test(target)) return 'adjective';
+  }
+
+  // Adverb morphology.
+  if (target.endsWith('ly')) return 'adverb';
+
+  // A word immediately before a noun-like target often acts as adjective,
+  // but only use this as a weak fallback.
+  if (next && determiners.has(prev) === false && /(ous|ful|ive|al|ic|able|ible|less|y)$/.test(target)) {
+    return 'adjective';
+  }
+
+  return undefined;
+}
+
 interface TooltipState {
   word: string;
   x: number; y: number;
   info: WordInfo | null;
   loading: boolean;
+  preferredPos?: 'verb' | 'noun' | 'adjective' | 'adverb';
 }
 
 function WordTooltip({
@@ -143,8 +212,28 @@ function WordTooltip({
   });
 
   React.useEffect(() => {
-    setSelectedGroup(0);
-  }, [word]);
+    if (!groups.length) {
+      setSelectedGroup(0);
+      return;
+    }
+
+    const preferred = state.preferredPos || info?.preferredPos;
+    if (!preferred) {
+      setSelectedGroup(0);
+      return;
+    }
+
+    const index = groups.findIndex(group => {
+      const pos = group.pos.toLowerCase();
+      if (preferred === 'verb') return pos === 'глагол' || pos === 'verb';
+      if (preferred === 'noun') return pos === 'существительное' || pos === 'noun';
+      if (preferred === 'adjective') return pos === 'прилагательное' || pos === 'adjective';
+      if (preferred === 'adverb') return pos === 'наречие' || pos === 'adverb';
+      return false;
+    });
+
+    setSelectedGroup(index >= 0 ? index : 0);
+  }, [word, groups.length, state.preferredPos, info?.preferredPos]);
 
   // Keep only real Russian variants and remove the main translation from alternatives.
   const isCyrillic = (s: string) => /[а-яёА-ЯЁ]/.test(s);
@@ -719,7 +808,7 @@ export function ReaderPage() {
   }, [handleNext, handlePrev]);
 
   // ── Word hover ───────────────────────────────────────────────────────────
-  const handleWordMouseEnter = (e: React.MouseEvent<HTMLSpanElement>, rawWord: string) => {
+  const handleWordMouseEnter = (e: React.MouseEvent<HTMLSpanElement>, rawWord: string, sentence: string) => {
     const word = rawWord.replace(/[^a-zA-Z'-]/g, '').toLowerCase().trim();
     if (!word || word.length < 2) return;
 
@@ -730,9 +819,11 @@ export function ReaderPage() {
     const x = rect.left + rect.width / 2;
     const y = rect.top - 8;
 
+    const preferredPos = inferPreferredPos(sentence, rawWord);
+
     hoverTimeoutRef.current = setTimeout(async () => {
-      setTooltip({ word, x, y, info: null, loading: true });
-      const info = await lookupWord(word);
+      setTooltip({ word, x, y, info: null, loading: true, preferredPos });
+      const info = await lookupWord(word, preferredPos);
       setTooltip(prev => prev?.word === word ? { ...prev, info, loading: false } : prev);
     }, 400);
   };
@@ -742,14 +833,22 @@ export function ReaderPage() {
     hideTimeoutRef.current = setTimeout(() => setTooltip(null), 300);
   };
 
-  const handleWordClick = async (e: React.MouseEvent<HTMLSpanElement>, rawWord: string) => {
+  const handleWordClick = async (e: React.MouseEvent<HTMLSpanElement>, rawWord: string, sentence: string) => {
     const word = rawWord.replace(/[^a-zA-Z'-]/g, '').toLowerCase().trim();
     if (!word || word.length < 2) return;
     clearTimeout(hoverTimeoutRef.current);
     clearTimeout(hideTimeoutRef.current);
     const rect = e.currentTarget.getBoundingClientRect();
-    setTooltip({ word, x: rect.left + rect.width / 2, y: rect.top - 8, info: null, loading: true });
-    const info = await lookupWord(word);
+    const preferredPos = inferPreferredPos(sentence, rawWord);
+    setTooltip({
+      word,
+      x: rect.left + rect.width / 2,
+      y: rect.top - 8,
+      info: null,
+      loading: true,
+      preferredPos,
+    });
+    const info = await lookupWord(word, preferredPos);
     setTooltip(previous => previous?.word === word ? { ...previous, info, loading: false } : previous);
   };
 
@@ -1011,9 +1110,9 @@ export function ReaderPage() {
                                 return (
                                   <span key={wi}
                                     className="hover:bg-primary/20 rounded transition-colors cursor-default"
-                                    onMouseEnter={e => handleWordMouseEnter(e, clean)}
+                                    onMouseEnter={e => handleWordMouseEnter(e, clean, sentence)}
                                     onMouseLeave={handleWordMouseLeave}
-                                    onClick={e => { e.stopPropagation(); handleWordClick(e, clean); }}>
+                                    onClick={e => { e.stopPropagation(); handleWordClick(e, clean, sentence); }}>
                                     {token}
                                   </span>
                                 );
