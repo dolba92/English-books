@@ -416,6 +416,9 @@ export function ReaderPage() {
   const readerRootRef = useRef<HTMLDivElement>(null);
   const touchStartXRef = useRef<number | null>(null);
   const readingAnchorRef = useRef<string | null>(null);
+  const restoredProgressRef = useRef<Awaited<ReturnType<typeof getProgress>>>(undefined);
+  const initialMeasuredPaginationRef = useRef(false);
+  const allowProgressSaveRef = useRef(false);
 
   const saveProgressRef = useRef(saveProgress);
   saveProgressRef.current = saveProgress;
@@ -449,6 +452,13 @@ export function ReaderPage() {
 
   useEffect(() => {
     const load = async () => {
+      // A new book load must not save page 1 before the measured paginator has
+      // restored the previously saved reading position.
+      initialMeasuredPaginationRef.current = false;
+      allowProgressSaveRef.current = false;
+      restoredProgressRef.current = undefined;
+      readingAnchorRef.current = null;
+
       const b = await getBook(id);
       if (b) {
         setBook(b);
@@ -468,9 +478,23 @@ export function ReaderPage() {
             ],
           }));
         });
-        setPages(flat);
+
         const prog = await getProgress(id);
-        if (prog && prog.currentPage < flat.length) setCurrentPageIdx(prog.currentPage);
+        restoredProgressRef.current = prog;
+
+        // Temporary pages are only used while the accurate DOM-measured paginator
+        // is being built. Restore a reasonable provisional position so page 1 never
+        // flashes and becomes the new saved progress.
+        let provisionalIndex = 0;
+        if (prog && flat.length > 0) {
+          provisionalIndex = prog.percentComplete > 0
+            ? Math.round((Math.min(100, Math.max(0, prog.percentComplete)) / 100) * (flat.length - 1))
+            : Math.min(Math.max(0, prog.currentPage), flat.length - 1);
+        }
+
+        setPages(flat);
+        setCurrentPageIdx(provisionalIndex);
+        readingAnchorRef.current = flat[provisionalIndex]?.blocks.find(block => block.kind === 'paragraph')?.text || null;
       }
       setLoading(false);
     };
@@ -545,13 +569,32 @@ export function ReaderPage() {
     const nextPages: PageData[] = measuredPages;
     if (!nextPages.length) return;
     const anchor = readingAnchorRef.current;
-    const nextIndex = anchor
-      ? Math.max(0, nextPages.findIndex(candidate => candidate.blocks.some(block =>
-        block.kind === 'paragraph' && (block.text === anchor || block.text.startsWith(anchor) || anchor.startsWith(block.text))
-      )))
-      : currentPageIdx;
+    let nextIndex: number;
+
+    if (!initialMeasuredPaginationRef.current) {
+      // First accurate pagination after opening the book: restore from persisted
+      // progress, not from the temporary page index created during loading.
+      const saved = restoredProgressRef.current;
+      if (saved) {
+        nextIndex = saved.percentComplete > 0
+          ? Math.round((Math.min(100, Math.max(0, saved.percentComplete)) / 100) * (nextPages.length - 1))
+          : Math.min(Math.max(0, saved.currentPage), nextPages.length - 1);
+      } else {
+        nextIndex = 0;
+      }
+      initialMeasuredPaginationRef.current = true;
+    } else {
+      const anchoredIndex = anchor
+        ? nextPages.findIndex(candidate => candidate.blocks.some(block =>
+          block.kind === 'paragraph' && (block.text === anchor || block.text.startsWith(anchor) || anchor.startsWith(block.text))
+        ))
+        : -1;
+      nextIndex = anchoredIndex >= 0 ? anchoredIndex : Math.min(currentPageIdx, nextPages.length - 1);
+    }
+
     setPages(nextPages);
-    setCurrentPageIdx(Math.min(nextIndex < 0 ? currentPageIdx : nextIndex, nextPages.length - 1));
+    setCurrentPageIdx(Math.min(Math.max(0, nextIndex), nextPages.length - 1));
+    allowProgressSaveRef.current = true;
     // Deliberately reflow only when reader layout settings change; the anchor keeps the reader in the same passage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -567,7 +610,7 @@ export function ReaderPage() {
   ]);
 
   useEffect(() => {
-    if (!book || pages.length === 0) return;
+    if (!book || pages.length === 0 || !allowProgressSaveRef.current) return;
     const timer = setTimeout(() => {
       const pct = (currentPageIdx / (pages.length - 1 || 1)) * 100;
        saveProgressRef.current({ bookId: id, currentChapterIndex: 0, currentPage: currentPageIdx, totalPagesRead: currentPageIdx + 1, lastReadAt: Date.now(), percentComplete: pct });
