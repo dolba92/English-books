@@ -364,7 +364,18 @@ function WordTooltip({
     }
 
     setPopupStyle({ left, top });
-  }, [word, x, y, info, loading, selectedGroup, lemma]);
+  }, [
+    word,
+    x,
+    y,
+    info,
+    loading,
+    selectedGroup,
+    lemma,
+    choosingTranslations,
+    selectedTranslations.length,
+    candidateTranslations.length,
+  ]);
 
   return (
     <motion.div
@@ -378,7 +389,7 @@ function WordTooltip({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-       <div className="bg-card border border-border shadow-2xl rounded-2xl w-[min(18rem,calc(100vw-2rem))] max-h-[calc(100dvh-7rem)] overflow-y-auto">
+       <div className="bg-card border border-border shadow-2xl rounded-2xl w-[min(18rem,calc(100vw-2rem))] max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain">
         {/* Header: word + speak button */}
         <div className="flex items-center gap-2 px-4 pt-4 pb-1">
           <span className="flex-1 font-bold text-xl text-foreground leading-tight">{word}</span>
@@ -480,7 +491,7 @@ function WordTooltip({
                   );
                 })}
               </div>
-              <div className="flex gap-2 pt-1">
+              <div className="sticky bottom-0 -mx-3 -mb-3 px-3 pt-2 pb-3 bg-card/95 backdrop-blur-sm border-t border-border/60 flex gap-2">
                 <button
                   type="button"
                   onClick={() => setChoosingTranslations(false)}
