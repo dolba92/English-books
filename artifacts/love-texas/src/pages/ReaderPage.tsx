@@ -117,6 +117,15 @@ const PAGINATION_CACHE_VERSION = 1;
 
 // ── Word Tooltip ─────────────────────────────────────────────────────────────
 
+
+const CONTEXT_VERB_BASES = new Set([
+  'mean','try','stand','stare','murmur','lean','seep','pull','look','say','tell','ask','reply',
+  'want','understand','discover','search','reach','knock','move','come','go','run','take','bring',
+  'keep','feel','find','hold','leave','turn','smile','freeze','tear','call','watch','work','play',
+  'walk','wait','help','open','close','change','follow','remember','return','start','stop','study',
+  'talk','use','love','like','live','hope','jump','learn','plan','rain','cook','dance','clean',
+]);
+
 function inferPreferredPos(sentence: string, rawWord: string): 'verb' | 'noun' | 'adjective' | 'adverb' | undefined {
   const tokens = sentence
     .replace(/[“”‘’"«»()[\]{}—–….,!?;:]/g, ' ')
@@ -144,6 +153,12 @@ function inferPreferredPos(sentence: string, rawWord: string): 'verb' | 'noun' |
   // Strong verb morphology / constructions.
   if (target.endsWith('ing')) {
     if (determiners.has(prev)) return 'noun';
+
+    // Verb-like complements make this unambiguously verbal.
+    if (['to','at','in','on','into','from','with','for','towards','toward','over'].includes(next)) {
+      return 'verb';
+    }
+
     return 'verb';
   }
 
@@ -162,6 +177,26 @@ function inferPreferredPos(sentence: string, rawWord: string): 'verb' | 'noun' |
     // A capitalized token immediately before usually acts as a subject name.
     const rawPrev = tokens[index - 1] || '';
     if (/^[A-Z][A-Za-z'-]*$/.test(rawPrev)) return 'verb';
+
+    const base = target.slice(0, -1);
+
+    // Known verb base + an explicit subject-like token before it:
+    // "what she means", "Thomas murmurs", "Dad leans".
+    if (CONTEXT_VERB_BASES.has(base)) {
+      const prev2 = (tokens[index - 2] || '').toLowerCase().replace(/[^a-z'-]/g, '');
+      if (
+        subjectPronouns.has(prev) ||
+        subjectPronouns.has(prev2) ||
+        /^[A-Z][A-Za-z'-]*$/.test(rawPrev) ||
+        ['what','who','that','which'].includes(prev2)
+      ) {
+        return 'verb';
+      }
+    }
+
+    // If the word after it strongly looks like an object/complement rather than
+    // punctuation, prefer verb for known verb bases.
+    if (CONTEXT_VERB_BASES.has(base) && next) return 'verb';
   }
 
   // Infinitive after "to".
