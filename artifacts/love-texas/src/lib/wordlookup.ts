@@ -18,6 +18,7 @@ export interface WordInfo {
   groups: RuGroup[];
   lemma?: string;
   lemmaTranslation?: string;
+  preferredPos?: string;
 }
 
 const POS_RU: Record<string, string> = {
@@ -38,7 +39,7 @@ function posRu(en: string): string {
   return POS_RU[key] ?? (key || 'варианты');
 }
 
-const CACHE_PREFIX = 'ltx10-word-';
+const CACHE_PREFIX = 'ltx11-word-';
 
 function readCache(key: string): WordInfo | null {
   try {
@@ -241,10 +242,26 @@ const COMMON_CONTEXTUAL_VERBS: Record<string, string> = {
   slurs: 'невнятно произносит',
 };
 
-export async function lookupWord(surfaceWord: string): Promise<WordInfo> {
+
+function findPreferredGroup(groups: RuGroup[], preferredPos?: string): RuGroup | undefined {
+  if (!preferredPos) return undefined;
+  const wanted = preferredPos.toLowerCase();
+
+  return groups.find(group => {
+    const pos = group.pos.toLowerCase();
+    if (wanted === 'verb') return pos === 'глагол' || pos === 'verb';
+    if (wanted === 'noun') return pos === 'существительное' || pos === 'noun';
+    if (wanted === 'adjective') return pos === 'прилагательное' || pos === 'adjective';
+    if (wanted === 'adverb') return pos === 'наречие' || pos === 'adverb';
+    return pos === wanted;
+  });
+}
+
+export async function lookupWord(surfaceWord: string, preferredPos?: string): Promise<WordInfo> {
   const surface = surfaceWord.toLowerCase().trim();
   const lemma = getLemma(surface);
-  const cacheKey = `${surface}|${lemma}`;
+  const normalizedPreferredPos = preferredPos?.toLowerCase().trim() || '';
+  const cacheKey = `${surface}|${lemma}|${normalizedPreferredPos}`;
 
   const empty: WordInfo = { word: surface, translation: '', groups: [] };
   if (!surface || surface.length < 2) return empty;
@@ -297,15 +314,25 @@ export async function lookupWord(surfaceWord: string): Promise<WordInfo> {
 
   // If every dictionary source returned only the main translation, still keep
   // a valid card rather than inventing synonyms.
+  const preferredGroup = findPreferredGroup(groups, normalizedPreferredPos);
+
+  // For dictionary saving, prefer the translation belonging to the detected
+  // part of speech. This fixes cases such as:
+  // murmurs -> murmur -> бормотать (not noun "ропот")
+  // trying -> try -> пытаться (not adjective "пытливый")
   const lemmaTranslation =
     lemma !== surface
       ? (
+          preferredGroup?.words?.[0] ||
           lemmaGoogle?.translation ||
           lingva?.translation ||
           memory?.translation ||
           ''
         )
-      : translation;
+      : (
+          preferredGroup?.words?.[0] ||
+          translation
+        );
 
   const result: WordInfo = {
     word: surface,
@@ -314,6 +341,7 @@ export async function lookupWord(surfaceWord: string): Promise<WordInfo> {
     groups,
     lemma,
     lemmaTranslation,
+    preferredPos: normalizedPreferredPos || undefined,
   };
 
   if (result.translation) writeCache(cacheKey, result);
