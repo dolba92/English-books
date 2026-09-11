@@ -1,12 +1,9 @@
 const KNOWN_LEMMAS: Record<string, string> = {
   talking: 'talk',
   talked: 'talk',
-  faces: 'face',
   dressed: 'dress',
   heard: 'hear',
   hummed: 'hum',
-  pinpricks: 'pinprick',
-  books: 'book',
   children: 'child',
   went: 'go',
   gone: 'go',
@@ -51,7 +48,6 @@ const KNOWN_LEMMAS: Record<string, string> = {
   ran: 'run',
   felt: 'feel',
   left: 'leave',
-  read: 'read',
   wrote: 'write',
   began: 'begin',
   became: 'become',
@@ -68,7 +64,6 @@ const KNOWN_LEMMAS: Record<string, string> = {
   grew: 'grow',
   held: 'hold',
   kept: 'keep',
-  lay: 'lie',
   led: 'lead',
   lost: 'lose',
   met: 'meet',
@@ -86,101 +81,16 @@ const KNOWN_LEMMAS: Record<string, string> = {
   woke: 'wake',
   wore: 'wear',
   won: 'win',
-  means: 'mean',
-  translations: 'translation',
-  trying: 'try',
 };
 
-const PROTECTED_WORDS = new Set([
-  'this', 'is', 'was', 'has', 'news', 'series', 'species', 'business',
-  'thing', 'things', 'string', 'spring', 'morning', 'king', 'sing',
-  'always', 'status',
-]);
-
-const COMMON_BASES = new Set([
-  'answer', 'arrive', 'ask', 'call', 'carry', 'change', 'clean', 'close',
-  'cook', 'dance', 'drop', 'enjoy', 'follow', 'help', 'hope', 'jump',
-  'learn', 'like', 'live', 'look', 'love', 'move', 'open', 'play',
-  'plan', 'rain', 'remember', 'return', 'smile', 'start', 'stop', 'study',
-  'talk', 'use', 'wait', 'walk', 'want', 'watch', 'work', 'read',
-  'lean', 'seem', 'stare', 'pick', 'leave', 'pull', 'retire', 'shake',
-  'hold', 'breathe', 'stand', 'turn', 'murmur', 'slur', 'hang', 'threaten',
-  'settle', 'freeze', 'bring', 'take', 'feel', 'find', 'keep', 'dress',
-  'seep', 'splatter', 'excuse', 'say', 'smile', 'freeze', 'tear',
-  'try', 'understand', 'recruit', 'discover', 'search', 'reach', 'knock',
-  'mean', 'translate', 'translation', 'guardian', 'language', 'parent',
-  'eye', 'hand', 'word', 'place', 'thing', 'tear', 'lamp', 'arm', 'boot',
-]);
-
-function fromKnownSuffix(word: string): string | undefined {
-  if (PROTECTED_WORDS.has(word)) return undefined;
-
-  if (word.endsWith('ing') && word.length > 6) {
-    const stem = word.slice(0, -3);
-
-    // Check the real base first: pulling -> pull, NOT "pul".
-    if (COMMON_BASES.has(stem)) return stem;
-    if (COMMON_BASES.has(`${stem}e`)) return `${stem}e`;
-
-    // Only then handle doubled consonants: running -> run, stopping -> stop.
-    if (stem.length >= 3 && /(.)\1$/.test(stem)) {
-      const undoubled = stem.slice(0, -1);
-      if (COMMON_BASES.has(undoubled)) return undoubled;
-    }
-  }
-
-  if (word.endsWith('ies') && word.length > 5) {
-    const candidate = `${word.slice(0, -3)}y`;
-    if (COMMON_BASES.has(candidate)) return candidate;
-  }
-
-  if (/(ches|shes|xes|zes|sses)$/.test(word) && word.length > 5) {
-    const candidate = word.slice(0, -2);
-    if (candidate.length >= 3) return candidate;
-  }
-
-  if (word.endsWith('ed') && word.length > 5) {
-    const stem = word.slice(0, -2);
-    if (COMMON_BASES.has(stem)) return stem;
-    if (/(.)\1$/.test(stem) && COMMON_BASES.has(stem.slice(0, -1))) {
-      return stem.slice(0, -1);
-    }
-    if (COMMON_BASES.has(`${stem}e`)) return `${stem}e`;
-  }
-
-  if (word.endsWith('es') && word.length > 5) {
-    const candidate = word.slice(0, -2);
-    if (COMMON_BASES.has(candidate)) return candidate;
-    const candidateWithE = word.slice(0, -1);
-    if (COMMON_BASES.has(candidateWithE)) return candidateWithE;
-  }
-
-  if (word.endsWith('s') && word.length > 4 && !word.endsWith('ss')) {
-    const singular = word.slice(0, -1);
-
-    // Prefer known/common dictionary bases.
-    if (singular.length >= 3 && COMMON_BASES.has(singular)) return singular;
-
-    // Conservative noun plural fallback for longer alphabetic words.
-    // Avoid verb-like 3rd-person forms when the base is a known verb.
-    if (
-      singular.length >= 5 &&
-      /^[a-z'-]+$/.test(singular) &&
-      !COMMON_BASES.has(singular)
-    ) {
-      return singular;
-    }
-  }
-
-  return undefined;
-}
-
 /**
- * Conservative local metadata only.
- * Known forms and high-confidence suffixes are normalized to a dictionary form.
+ * Conservative fallback lemma.
+ * This function intentionally does NOT guess ambiguous -s forms such as
+ * "leaves" because they can be either a plural noun or a verb.
+ * Context-aware normalization happens in wordlookup.ts.
  */
 export function getLemma(word: string): string {
   const normalized = word.toLowerCase().replace(/[^a-z'-]/g, '');
   if (!normalized) return word;
-  return KNOWN_LEMMAS[normalized] || fromKnownSuffix(normalized) || normalized;
+  return KNOWN_LEMMAS[normalized] || normalized;
 }
