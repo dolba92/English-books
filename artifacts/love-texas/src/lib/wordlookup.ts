@@ -342,8 +342,17 @@ function deriveConfidentLemma(
   // -ed once context says verb.
   if (preferredPos === 'verb' && word.endsWith('ed') && word.length > 4) {
     const stem = word.slice(0, -2);
+
+    // Some verbs already end in a doubled consonant:
+    // pull -> pulled, call -> called, miss -> missed, buzz -> buzzed.
+    // Do not turn them into "pul", "cal", "mis", "buz".
+    if (/(ll|ss|ff|zz)$/.test(stem)) return stem;
+
+    // Doubling added by the past-tense spelling rule:
+    // stop -> stopped, plan -> planned.
     if (/(.)\1$/.test(stem)) return stem.slice(0, -1);
-    if (/(mov|lov|us|clos|chang|arriv)$/.test(stem)) return `${stem}e`;
+
+    if (/(mov|lov|us|clos|chang|arriv|replac|dou|stain)$/.test(stem)) return `${stem}e`;
     return stem;
   }
 
