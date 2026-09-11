@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'wouter';
 import { Book, getBook, getProgress, saveProgress, addWordToDictionary } from '@/lib/storage';
-import { paginateBook } from '@/lib/paginator';
+import { paginateBook, paginateBookContinuousMeasured, ContinuousPageBlock } from '@/lib/paginator';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { FONTS, getFontCss } from '@/lib/fonts';
 import { lookupWord, translateSentence, WordInfo, RuGroup } from '@/lib/wordlookup';
@@ -96,7 +96,7 @@ function normalizeReadingText(text: string): string {
     .replace(/([,;:])(?=[A-Za-zА-Яа-яЁё])/g, '$1 ');
 }
 
-interface PageData { title: string; paragraphs: string[]; images?: string[]; isChapterStart: boolean; }
+interface PageData { title: string; blocks: ContinuousPageBlock[]; }
 interface TocEntry { title: string; pageIdx: number; }
 
 // ── Word Tooltip ─────────────────────────────────────────────────────────────
@@ -420,7 +420,13 @@ export function ReaderPage() {
         );
         const flat: PageData[] = [];
         paginatedChapters.forEach(ch => {
-          ch.pages.forEach((p, pi) => flat.push({ title: ch.title, paragraphs: p, images: pi === 0 ? ch.images : undefined, isChapterStart: pi === 0 }));
+          ch.pages.forEach((paragraphs, pageIndex) => flat.push({
+            title: ch.title,
+            blocks: [
+              ...(pageIndex === 0 ? [{ kind: 'heading' as const, title: ch.title, images: ch.images }] : []),
+              ...paragraphs.map(text => ({ kind: 'paragraph' as const, text })),
+            ],
+          }));
         });
         setPages(flat);
         const prog = await getProgress(id);
@@ -432,7 +438,7 @@ export function ReaderPage() {
   }, [id]);
 
   useEffect(() => {
-    if (pages.length > 0) readingAnchorRef.current = pages[currentPageIdx]?.paragraphs[0] || null;
+    if (pages.length > 0) readingAnchorRef.current = pages[currentPageIdx]?.blocks.find(block => block.kind === 'paragraph')?.text || null;
   }, [pages, currentPageIdx]);
 
   useEffect(() => {
@@ -441,32 +447,38 @@ export function ReaderPage() {
     const panelWidth = viewportWidth >= 768
       ? (showReaderSettings ? 390 : selectedSentence ? 380 : 0) + (showToc ? 280 : 0)
       : 0;
+    const mainWidth = Math.max(280, viewportWidth - panelWidth);
+    const maxReaderWidth = settings.pageWidth === 'narrow' ? 760 : settings.pageWidth === 'wide' ? 1250 : 980;
     const horizontalPadding = isMobileLayout
       ? (settings.pageMargin === 'compact' ? 24 : settings.pageMargin === 'wide' ? 48 : 36)
       : (settings.pageMargin === 'compact' ? 48 : settings.pageMargin === 'wide' ? 128 : 80);
-    const textWidth = Math.max(280, viewportWidth - panelWidth - horizontalPadding);
-    const averageCharacterWidth = Math.max(7, settings.fontSize * 0.52);
-    const charactersPerLine = Math.max(24, Math.floor(textWidth / averageCharacterWidth));
+    const contentWidth = Math.max(260, Math.min(mainWidth, maxReaderWidth) - horizontalPadding);
     const verticalPadding = isMobileLayout ? 24 : 32;
     const hintReserve = showHint ? (isMobileLayout ? 112 : 84) : 0;
-    const usableHeight = Math.max(180, viewportHeight - 56 - 36 - verticalPadding - 12 - hintReserve);
-    const estimatedLines = Math.max(8, Math.floor(usableHeight / (settings.fontSize * settings.lineHeight)));
-    const maxChars = Math.max(420, Math.floor(estimatedLines * charactersPerLine * (settings.firstLineIndent ? 0.86 : 0.9)));
-    const paragraphsPerPage = Math.max(1, Math.floor(estimatedLines / Math.max(4.1, 3.5 + settings.paragraphSpacing)));
-    const { paginatedChapters } = paginateBook(
-      book.content,
-      paragraphsPerPage,
-      maxChars,
-    );
-    const nextPages: PageData[] = [];
-    paginatedChapters.forEach(chapter => chapter.pages.forEach((paragraphs, pageIndex) => {
-      nextPages.push({ title: chapter.title, paragraphs, images: pageIndex === 0 ? chapter.images : undefined, isChapterStart: pageIndex === 0 });
-    }));
+    // Header = 56px, footer = 36px. Keep only a small safety gap: the old
+    // estimator reserved far too much room and left half-empty EPUB pages.
+    const contentHeight = Math.max(180, viewportHeight - 56 - 36 - verticalPadding - hintReserve - 8);
+    const fontCssForMeasure = getFontCss(settings.fontFamily);
+    const illustrationReserve = settings.showIllustrations ? Math.min(viewportHeight * 0.38, 300) : 0;
+    const { pages: measuredPages } = paginateBookContinuousMeasured(book.content, {
+      contentWidth,
+      contentHeight,
+      fontSize: settings.fontSize,
+      lineHeight: settings.lineHeight,
+      fontFamily: fontCssForMeasure,
+      fontWeight: settings.fontWeight,
+      paragraphSpacingEm: settings.paragraphSpacing,
+      firstLineIndent: settings.firstLineIndent,
+      textAlign: settings.textAlign,
+      showIllustrations: settings.showIllustrations,
+      illustrationReservePx: illustrationReserve,
+    });
+    const nextPages: PageData[] = measuredPages;
     if (!nextPages.length) return;
     const anchor = readingAnchorRef.current;
     const nextIndex = anchor
-      ? Math.max(0, nextPages.findIndex(candidate => candidate.paragraphs.some(paragraph =>
-        paragraph === anchor || paragraph.startsWith(anchor) || anchor.startsWith(paragraph)
+      ? Math.max(0, nextPages.findIndex(candidate => candidate.blocks.some(block =>
+        block.kind === 'paragraph' && (block.text === anchor || block.text.startsWith(anchor) || anchor.startsWith(block.text))
       )))
       : currentPageIdx;
     setPages(nextPages);
@@ -505,7 +517,13 @@ export function ReaderPage() {
 
   const tocEntries: TocEntry[] = useMemo(() => {
     const entries: TocEntry[] = [];
-    pages.forEach((p, idx) => { if (p.isChapterStart) entries.push({ title: p.title, pageIdx: idx }); });
+    pages.forEach((p, idx) => {
+      p.blocks.forEach(block => {
+        if (block.kind === 'heading' && !entries.some(entry => entry.title === block.title && entry.pageIdx === idx)) {
+          entries.push({ title: block.title, pageIdx: idx });
+        }
+      });
+    });
     return entries;
   }, [pages]);
 
@@ -754,23 +772,48 @@ export function ReaderPage() {
             <AnimatePresence mode="wait">
               <motion.div key={currentPageIdx} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.25 }}
                style={{ fontSize: `${readerFontSize}px`, lineHeight: readerLineHeight, fontFamily: fontCss, fontWeight: settings.fontWeight }}>
-                {settings.showIllustrations && page.images?.map((image, imageIndex) => (
-                  <img
-                    key={`${currentPageIdx}-illustration-${imageIndex}`}
-                    src={image}
-                    alt=""
-                    className="reader-illustration"
-                    loading="lazy"
-                  />
-                ))}
-                {page.isChapterStart && page.title && (
-                  <h2 className="font-serif text-center font-bold mb-6 text-primary/60 text-[1.1em]">{page.title}</h2>
-                )}
-                <div className="flex flex-col" style={{ gap: `${settings.paragraphSpacing}em` }}>
-                  {page.paragraphs.map((para, pi) => {
-                     const sentences = splitSentences(normalizeReadingText(para));
+                <div>
+                  {page.blocks.map((block, bi) => {
+                    if (block.kind === 'heading') {
+                      return (
+                        <React.Fragment key={`heading-${bi}-${block.title}`}>
+                          {settings.showIllustrations && block.images?.map((image, imageIndex) => (
+                            <img
+                              key={`${currentPageIdx}-${bi}-illustration-${imageIndex}`}
+                              src={image}
+                              alt=""
+                              className="reader-illustration"
+                              loading="lazy"
+                            />
+                          ))}
+                          {block.title && (
+                            <h2
+                              className="font-serif text-center font-bold text-primary/60 text-[1.1em]"
+                              style={{ marginTop: bi === 0 ? 0 : 24, marginBottom: 24 }}
+                            >
+                              {block.title}
+                            </h2>
+                          )}
+                        </React.Fragment>
+                      );
+                    }
+
+                    const para = block.text;
+                    const sentences = splitSentences(normalizeReadingText(para));
+                    const previousBlock = page.blocks[bi - 1];
+                    const paragraphMarginTop = bi > 0 && previousBlock?.kind === 'paragraph'
+                      ? `${settings.paragraphSpacing}em`
+                      : undefined;
                     return (
-                        <p key={pi} className={`text-foreground/90 ${settings.textAlign === 'justify' ? 'text-justify' : 'text-left'}`} style={{ color: readerTextColor, textIndent: settings.firstLineIndent ? '1.5em' : undefined }}>
+                      <p
+                        key={`paragraph-${bi}`}
+                        className={`text-foreground/90 ${settings.textAlign === 'justify' ? 'text-justify' : 'text-left'}`}
+                        style={{
+                          color: readerTextColor,
+                          textIndent: settings.firstLineIndent ? '1.5em' : undefined,
+                          marginTop: paragraphMarginTop,
+                        }}
+                      >
                         {sentences.map((sentence, si) => {
                           const punctMatch = sentence.match(/^([\s\S]*?)([.!?…]+["'»]?\s*)$/);
                           const body = punctMatch ? punctMatch[1] : sentence;
@@ -787,13 +830,13 @@ export function ReaderPage() {
                                     className="hover:bg-primary/20 rounded px-[1px] transition-colors cursor-default"
                                     onMouseEnter={e => handleWordMouseEnter(e, clean)}
                                     onMouseLeave={handleWordMouseLeave}
-                                     onClick={e => { e.stopPropagation(); handleWordClick(e, clean); }}>
+                                    onClick={e => { e.stopPropagation(); handleWordClick(e, clean); }}>
                                     {token}
                                   </span>
                                 );
                               })}
                               {punct && (
-                                 <button data-testid={`button-translate-sentence-${currentPageIdx}-${pi}-${si}`} onClick={() => handleSentenceClick(sentence)} title="Перевести предложение"
+                                <button data-testid={`button-translate-sentence-${currentPageIdx}-${bi}-${si}`} onClick={() => handleSentenceClick(sentence)} title="Перевести предложение"
                                   className={`inline font-bold transition-colors rounded px-[1px] cursor-pointer ${isSelected ? 'text-primary' : 'text-primary/50 hover:text-primary'}`}>
                                   {punct}
                                 </button>
