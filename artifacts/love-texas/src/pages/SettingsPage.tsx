@@ -27,7 +27,7 @@ export function SettingsPage() {
     localStorage.removeItem('lt-reader-settings');
     updateSettings({
       fontSize: 17,
-      pageWidth: 'medium',
+       pageWidth: 'wide',
       fontFamily: 'Source Serif 4',
       lineHeight: 1.65,
       paragraphSpacing: 0.8,
@@ -37,7 +37,7 @@ export function SettingsPage() {
       autoSave: true,
       fontWeight: 400,
       firstLineIndent: true,
-      pageMargin: 'comfortable',
+       pageMargin: 'compact',
       showIllustrations: true,
       readerTheme: 'default',
     });

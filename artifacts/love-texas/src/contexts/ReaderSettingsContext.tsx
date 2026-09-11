@@ -19,7 +19,7 @@ export interface ReaderSettings {
 
 const defaultSettings: ReaderSettings = {
   fontSize: 17,
-  pageWidth: 'medium',
+  pageWidth: 'wide',
   fontFamily: 'Source Serif 4',
   lineHeight: 1.65,
   paragraphSpacing: 0.8,
@@ -29,7 +29,7 @@ const defaultSettings: ReaderSettings = {
   autoSave: true,
   fontWeight: 400,
   firstLineIndent: true,
-  pageMargin: 'comfortable',
+  pageMargin: 'compact',
   showIllustrations: true,
   readerTheme: 'default',
 };
@@ -46,7 +46,20 @@ export function ReaderSettingsProvider({ children }: { children: React.ReactNode
     const saved = localStorage.getItem('lt-reader-settings');
     if (saved) {
       try {
-        return { ...defaultSettings, ...JSON.parse(saved) };
+          const parsed = JSON.parse(saved) as Partial<ReaderSettings>;
+          const isPreviousDefault = parsed.fontSize === 17
+            && parsed.pageWidth === 'medium'
+            && parsed.pageMargin === 'comfortable'
+            && parsed.fontFamily === 'Source Serif 4'
+            && parsed.lineHeight === 1.65
+            && parsed.paragraphSpacing === 0.8
+            && parsed.textAlign === 'justify'
+            && parsed.readerTheme === 'default';
+          return {
+            ...defaultSettings,
+            ...parsed,
+            ...(isPreviousDefault ? { pageWidth: 'wide', pageMargin: 'compact' } : {}),
+          };
       } catch (e) {
         return defaultSettings;
       }

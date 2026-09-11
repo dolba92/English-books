@@ -303,6 +303,31 @@
   .reader-choice:hover, .reader-choice-active { color: hsl(var(--foreground)); border-color: hsl(var(--primary) / .62); background: hsl(var(--primary) / .1); }
   .reader-immersive { position: fixed; inset: 0; z-index: 80; }
   .reader-illustration { display: block; width: 100%; max-height: 38dvh; object-fit: contain; margin: 0 auto 1.25rem; border-radius: .75rem; break-inside: avoid; }
+  .reader-root[data-reader-theme] {
+    background-color: var(--reader-bg) !important;
+    color: var(--reader-text);
+  }
+  .reader-root[data-reader-theme] .bg-background,
+  .reader-root[data-reader-theme] .bg-card {
+    background-color: var(--reader-panel) !important;
+  }
+  .reader-root[data-reader-theme] .bg-background {
+    background-color: var(--reader-bg) !important;
+  }
+  .reader-root[data-reader-theme] .bg-muted {
+    background-color: var(--reader-muted-surface) !important;
+  }
+  .reader-root[data-reader-theme] .text-foreground,
+  .reader-root[data-reader-theme] .text-foreground\/90 {
+    color: var(--reader-text) !important;
+  }
+  .reader-root[data-reader-theme] .text-muted-foreground {
+    color: var(--reader-muted) !important;
+  }
+  .reader-root[data-reader-theme] .border-border,
+  .reader-root[data-reader-theme] .border-border\/40 {
+    border-color: var(--reader-border) !important;
+  }
   .animate-rise { animation: rise .55s cubic-bezier(.22,.8,.28,1) both; }
   .animate-breathe { animation: breathe 4s ease-in-out infinite; }
 }

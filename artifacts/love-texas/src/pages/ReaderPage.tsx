@@ -438,27 +438,25 @@ export function ReaderPage() {
   useEffect(() => {
     if (!book || pages.length === 0) return;
     const isMobileLayout = viewportWidth < 640;
-    const widthFactor = settings.pageWidth === 'narrow' ? 0.78 : settings.pageWidth === 'wide' ? 1.18 : 1;
-    const fontFactor = 17 / Math.max(settings.fontSize, 13);
-    const lineFactor = 1.65 / Math.max(settings.lineHeight, 1.3);
     const panelWidth = viewportWidth >= 768
       ? (showReaderSettings ? 390 : selectedSentence ? 380 : 0) + (showToc ? 280 : 0)
       : 0;
     const horizontalPadding = isMobileLayout
-      ? (settings.pageMargin === 'compact' ? 32 : settings.pageMargin === 'wide' ? 56 : 40)
-      : (settings.pageMargin === 'compact' ? 64 : settings.pageMargin === 'wide' ? 128 : 96);
+      ? (settings.pageMargin === 'compact' ? 24 : settings.pageMargin === 'wide' ? 48 : 36)
+      : (settings.pageMargin === 'compact' ? 48 : settings.pageMargin === 'wide' ? 128 : 80);
     const textWidth = Math.max(280, viewportWidth - panelWidth - horizontalPadding);
     const averageCharacterWidth = Math.max(7, settings.fontSize * 0.52);
     const charactersPerLine = Math.max(24, Math.floor(textWidth / averageCharacterWidth));
-    const verticalPadding = isMobileLayout ? 40 : 64;
-    const usableHeight = Math.max(180, viewportHeight - 56 - 36 - verticalPadding - 18);
+    const verticalPadding = isMobileLayout ? 24 : 32;
+    const hintReserve = showHint ? (isMobileLayout ? 112 : 84) : 0;
+    const usableHeight = Math.max(180, viewportHeight - 56 - 36 - verticalPadding - 12 - hintReserve);
     const estimatedLines = Math.max(8, Math.floor(usableHeight / (settings.fontSize * settings.lineHeight)));
-    const maxChars = Math.max(420, Math.floor(estimatedLines * charactersPerLine * 0.78));
-    const paragraphsPerPage = Math.max(1, Math.floor(estimatedLines / 4));
+    const maxChars = Math.max(420, Math.floor(estimatedLines * charactersPerLine * (settings.firstLineIndent ? 0.86 : 0.9)));
+    const paragraphsPerPage = Math.max(1, Math.floor(estimatedLines / Math.max(4.1, 3.5 + settings.paragraphSpacing)));
     const { paginatedChapters } = paginateBook(
       book.content,
-      Math.max(1, Math.round(paragraphsPerPage * widthFactor * lineFactor * (settings.paragraphSpacing > 1 ? 0.9 : 1))),
-      Math.round(maxChars * widthFactor * fontFactor * lineFactor),
+      paragraphsPerPage,
+      maxChars,
     );
     const nextPages: PageData[] = [];
     paginatedChapters.forEach(chapter => chapter.pages.forEach((paragraphs, pageIndex) => {
@@ -490,6 +488,10 @@ export function ReaderPage() {
     settings.paragraphSpacing,
     settings.firstLineIndent,
     settings.textAlign,
+    settings.readerTheme,
+    showHint,
+    isFullscreen,
+    immersiveFallback,
   ]);
 
   useEffect(() => {
@@ -614,22 +616,45 @@ export function ReaderPage() {
 
   const page = pages[currentPageIdx];
   const percent = ((currentPageIdx + 1) / pages.length) * 100;
-  const widthClass = settings.pageWidth === 'narrow' ? 'max-w-xl' : settings.pageWidth === 'wide' ? 'max-w-4xl' : 'max-w-2xl';
+  const widthClass = settings.pageWidth === 'narrow'
+    ? 'max-w-[760px]'
+    : settings.pageWidth === 'wide'
+      ? 'max-w-[1250px]'
+      : 'max-w-[980px]';
   const fontCss = getFontCss(settings.fontFamily);
   const isMobile = viewportWidth < 640;
   const readerFontSize = settings.fontSize;
   const readerLineHeight = settings.lineHeight;
-  const readerThemeStyle: React.CSSProperties = settings.readerTheme === 'paper'
-    ? { backgroundColor: '#f4ead8' }
+  const readerSurface = settings.readerTheme === 'paper'
+    ? '#f4ead8'
     : settings.readerTheme === 'sepia'
-      ? { backgroundColor: '#ead9bd' }
+      ? '#ead9bd'
       : settings.readerTheme === 'night'
-        ? { backgroundColor: '#17151a', color: '#f5eee7' }
-        : (customBackgroundColor ? { backgroundColor: customBackgroundColor } : {});
-  const marginClass = settings.pageMargin === 'compact' ? 'px-4 sm:px-6 md:px-8' : settings.pageMargin === 'wide' ? 'px-7 sm:px-10 md:px-16' : 'px-5 sm:px-8 md:px-12';
+        ? '#2b2725'
+        : (customBackgroundColor || '#f0c8d5');
+  const readerTextColor = settings.readerTheme === 'night'
+    ? '#f1e9df'
+    : settings.readerTheme === 'paper'
+      ? '#493a2e'
+      : settings.readerTheme === 'sepia'
+        ? '#493126'
+        : settings.textColor;
+  const readerThemeStyle = {
+    '--reader-bg': readerSurface,
+    '--reader-text': readerTextColor,
+    '--reader-panel': settings.readerTheme === 'night' ? '#393331' : '#fffaf7',
+    '--reader-muted': settings.readerTheme === 'night' ? '#c8bcb2' : '#765c54',
+    '--reader-border': settings.readerTheme === 'night' ? 'rgba(245,238,231,.18)' : 'rgba(91,56,43,.16)',
+    '--reader-muted-surface': settings.readerTheme === 'night' ? '#46403d' : 'rgba(255,255,255,.48)',
+  } as React.CSSProperties;
+  const marginClass = settings.pageMargin === 'compact'
+    ? 'px-3 sm:px-5 md:px-6'
+    : settings.pageMargin === 'wide'
+      ? 'px-6 sm:px-10 md:px-16'
+      : 'px-4 sm:px-7 md:px-10';
 
   return (
-    <div ref={readerRootRef} className={`reader-root ${immersiveFallback ? 'reader-immersive' : ''} min-h-0 h-[100dvh] bg-background text-foreground flex flex-col selection:bg-primary/20 overflow-hidden`} style={readerThemeStyle}>
+    <div ref={readerRootRef} data-reader-theme={settings.readerTheme} className={`reader-root ${immersiveFallback ? 'reader-immersive' : ''} min-h-0 h-[100dvh] bg-background text-foreground flex flex-col selection:bg-primary/20 overflow-hidden`} style={readerThemeStyle}>
       <header className="h-14 flex items-center justify-between px-4 border-b border-border/40 shrink-0 sticky top-0 bg-background/90 backdrop-blur-md z-20">
         <div className="flex items-center gap-2">
           <Link href="/" data-testid="link-reader-library" aria-label="Вернуться в библиотеку" className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-full hover:bg-muted">
@@ -711,7 +736,7 @@ export function ReaderPage() {
              <ChevronRight size={18} aria-hidden="true" />
           </button>
 
-           <div className={`w-full ${widthClass} ${marginClass} py-5 sm:py-8 h-full overflow-hidden`}>
+           <div className={`w-full ${widthClass} ${marginClass} py-3 sm:py-4 h-full overflow-hidden`}>
             <AnimatePresence>
               {showHint && (
                 <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
@@ -745,7 +770,7 @@ export function ReaderPage() {
                   {page.paragraphs.map((para, pi) => {
                      const sentences = splitSentences(normalizeReadingText(para));
                     return (
-                       <p key={pi} className={`text-foreground/90 ${settings.textAlign === 'justify' ? 'text-justify' : 'text-left'}`} style={{ color: settings.textColor, textIndent: settings.firstLineIndent ? '1.5em' : undefined }}>
+                        <p key={pi} className={`text-foreground/90 ${settings.textAlign === 'justify' ? 'text-justify' : 'text-left'}`} style={{ color: readerTextColor, textIndent: settings.firstLineIndent ? '1.5em' : undefined }}>
                         {sentences.map((sentence, si) => {
                           const punctMatch = sentence.match(/^([\s\S]*?)([.!?…]+["'»]?\s*)$/);
                           const body = punctMatch ? punctMatch[1] : sentence;

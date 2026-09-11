@@ -8,6 +8,16 @@ import { Plus, Book as BookIcon, BookOpen, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import backgroundUrl from '@/assets/english-books-background.png';
 
+function levelForBook(title: string, author: string): string {
+  const levels = ['A1', 'A2', 'B1', 'B2', 'C1'];
+  const source = `${title}:${author}`.toLowerCase();
+  let hash = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    hash = (hash * 31 + source.charCodeAt(index)) >>> 0;
+  }
+  return levels[hash % levels.length];
+}
+
 export function LibraryPage() {
   const [books, setBooks] = useState<{ book: Book; progress: number }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,14 +105,11 @@ export function LibraryPage() {
       }
 
       const { totalPages } = paginateBook(parsed.chapters, 6);
-      const levels = ['A1', 'A2', 'B1', 'B2', 'C1'];
-      const randomLevel = levels[Math.floor(Math.random() * levels.length)];
-
       await saveBook({
         title: parsed.title,
         author: parsed.author,
         coverUrl: parsed.coverUrl,
-        level: randomLevel,
+        level: levelForBook(parsed.title, parsed.author),
         content: parsed.chapters,
         fileSizeKb: Math.round(file.size / 1024),
         addedAt: Date.now(),
