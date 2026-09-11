@@ -1,0 +1,13 @@
+Pagination v3
+
+Fixes FB2 parsing so nested <section> elements are not automatically treated as separate chapters/pages.
+This addresses the same half-empty-page symptom seen in EPUB/FB2 files.
+
+IMPORTANT: books already added to English Books are stored in IndexedDB in parsed form.
+Parser fixes cannot change those stored books automatically because the original EPUB/FB2 file is not retained.
+After deploying this version, delete the affected book from the Library and import the original EPUB/FB2 file again once.
+
+Vercel settings:
+Framework: Vite
+Root Directory: artifacts/love-texas
+Output Directory: dist
