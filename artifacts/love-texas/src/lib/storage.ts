@@ -1,4 +1,4 @@
-
+import { openDB, DBSchema, IDBPDatabase } from 'idb';
 
 export interface BookChapter {
   title: string;
@@ -95,28 +95,56 @@ interface LoveTexasDB extends DBSchema {
 
 let dbPromise: Promise<IDBPDatabase<LoveTexasDB>> | null = null;
 
+function openMainDB() {
+  return openDB<LoveTexasDB>('love-texas-db', 2, {
+    upgrade(db) {
+      if (!db.objectStoreNames.contains('books')) {
+        db.createObjectStore('books', { keyPath: 'id', autoIncrement: true });
+      }
+      if (!db.objectStoreNames.contains('progress')) {
+        db.createObjectStore('progress', { keyPath: 'bookId' });
+      }
+      if (!db.objectStoreNames.contains('dictionary')) {
+        const dictStore = db.createObjectStore('dictionary', { keyPath: 'id', autoIncrement: true });
+        dictStore.createIndex('by-word', 'word', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('stats')) {
+        db.createObjectStore('stats', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('paginationCache')) {
+        const cacheStore = db.createObjectStore('paginationCache', { keyPath: 'key' });
+        cacheStore.createIndex('by-book', 'bookId', { unique: false });
+      }
+    },
+    blocking() {
+      // If another tab needs a newer schema, release this connection.
+      dbPromise?.then(db => db.close()).catch(() => {});
+      dbPromise = null;
+    },
+    terminated() {
+      dbPromise = null;
+    },
+  });
+}
+
 async function getDB() {
   if (!dbPromise) {
-    dbPromise = openDB<LoveTexasDB>('love-texas-db', 2, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains('books')) {
-          db.createObjectStore('books', { keyPath: 'id', autoIncrement: true });
-        }
-        if (!db.objectStoreNames.contains('progress')) {
-          db.createObjectStore('progress', { keyPath: 'bookId' });
-        }
-        if (!db.objectStoreNames.contains('dictionary')) {
-          const dictStore = db.createObjectStore('dictionary', { keyPath: 'id', autoIncrement: true });
-          dictStore.createIndex('by-word', 'word', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('stats')) {
-          db.createObjectStore('stats', { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains('paginationCache')) {
-          const cacheStore = db.createObjectStore('paginationCache', { keyPath: 'key' });
-          cacheStore.createIndex('by-book', 'bookId', { unique: false });
-        }
-      },
+    dbPromise = openMainDB().catch(async (error) => {
+      console.warn('IndexedDB v2 open failed, trying existing database without migration:', error);
+
+      // Recovery path: never delete the user's database. If schema migration is
+      // unavailable/blocked in this browser, open whatever version already
+      // exists so books/progress/dictionary remain usable. Pagination cache is
+      // optional and its helpers below gracefully no-op if the store is absent.
+      return openDB<LoveTexasDB>('love-texas-db', undefined, {
+        blocking() {
+          dbPromise?.then(db => db.close()).catch(() => {});
+          dbPromise = null;
+        },
+        terminated() {
+          dbPromise = null;
+        },
+      });
     });
   }
   return dbPromise;
@@ -154,25 +182,30 @@ export async function deleteBook(id: number): Promise<void> {
   const db = await getDB();
   await db.delete('books', id);
   await db.delete('progress', id);
-  const cacheKeys = await db.getAllKeysFromIndex('paginationCache', 'by-book', id);
-  const tx = db.transaction('paginationCache', 'readwrite');
-  await Promise.all(cacheKeys.map(key => tx.store.delete(key)));
-  await tx.done;
+  if (db.objectStoreNames.contains('paginationCache')) {
+    const cacheKeys = await db.getAllKeysFromIndex('paginationCache', 'by-book', id);
+    const tx = db.transaction('paginationCache', 'readwrite');
+    await Promise.all(cacheKeys.map(key => tx.store.delete(key)));
+    await tx.done;
+  }
 }
 
 // --- PAGINATION CACHE ---
 export async function getPaginationCache(key: string): Promise<PaginationCacheEntry | undefined> {
   const db = await getDB();
+  if (!db.objectStoreNames.contains('paginationCache')) return undefined;
   return db.get('paginationCache', key);
 }
 
 export async function savePaginationCache(entry: PaginationCacheEntry): Promise<void> {
   const db = await getDB();
+  if (!db.objectStoreNames.contains('paginationCache')) return;
   await db.put('paginationCache', entry);
 }
 
 export async function clearPaginationCacheForBook(bookId: number): Promise<void> {
   const db = await getDB();
+  if (!db.objectStoreNames.contains('paginationCache')) return;
   const keys = await db.getAllKeysFromIndex('paginationCache', 'by-book', bookId);
   const tx = db.transaction('paginationCache', 'readwrite');
   await Promise.all(keys.map(key => tx.store.delete(key)));
@@ -265,7 +298,9 @@ export async function clearAllData(): Promise<void> {
   await db.clear('progress');
   await db.clear('dictionary');
   await db.clear('stats');
-  await db.clear('paginationCache');
+  if (db.objectStoreNames.contains('paginationCache')) {
+    await db.clear('paginationCache');
+  }
   await initStats();
 }
 
