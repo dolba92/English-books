@@ -103,6 +103,8 @@ const COMMON_BASES = new Set([
   'lean', 'seem', 'stare', 'pick', 'leave', 'pull', 'retire', 'shake',
   'hold', 'breathe', 'stand', 'turn', 'murmur', 'slur', 'hang', 'threaten',
   'settle', 'freeze', 'bring', 'take', 'feel', 'find', 'keep', 'dress',
+  'seep', 'splatter', 'excuse', 'say', 'smile', 'freeze', 'tear',
+  'try', 'understand', 'recruit', 'discover', 'search', 'reach', 'knock',
 ]);
 
 function fromKnownSuffix(word: string): string | undefined {
@@ -110,9 +112,16 @@ function fromKnownSuffix(word: string): string | undefined {
 
   if (word.endsWith('ing') && word.length > 6) {
     const stem = word.slice(0, -3);
-    if (stem.length >= 3 && /(.)\1$/.test(stem)) return stem.slice(0, -1);
+
+    // Check the real base first: pulling -> pull, NOT "pul".
     if (COMMON_BASES.has(stem)) return stem;
     if (COMMON_BASES.has(`${stem}e`)) return `${stem}e`;
+
+    // Only then handle doubled consonants: running -> run, stopping -> stop.
+    if (stem.length >= 3 && /(.)\1$/.test(stem)) {
+      const undoubled = stem.slice(0, -1);
+      if (COMMON_BASES.has(undoubled)) return undoubled;
+    }
   }
 
   if (word.endsWith('ies') && word.length > 5) {
