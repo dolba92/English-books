@@ -1,4 +1,4 @@
-cconst KNOWN_LEMMAS: Record<string, string> = {
+const KNOWN_LEMMAS: Record<string, string> = {
   talking: 'talk',
   talked: 'talk',
   faces: 'face',
