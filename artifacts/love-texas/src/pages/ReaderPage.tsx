@@ -495,8 +495,13 @@ export function ReaderPage() {
         setPages(flat);
         setCurrentPageIdx(provisionalIndex);
         readingAnchorRef.current = flat[provisionalIndex]?.blocks.find(block => block.kind === 'paragraph')?.text || null;
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
+      // Keep the reader in its loading state while the temporary pages exist.
+      // The accurate DOM-measured pagination below will restore the saved
+      // position first, then reveal the reader. This prevents the visible
+      // "open saved page -> jump a few seconds later" effect.
     };
     load();
   }, [id]);
@@ -595,6 +600,9 @@ export function ReaderPage() {
     setPages(nextPages);
     setCurrentPageIdx(Math.min(Math.max(0, nextIndex), nextPages.length - 1));
     allowProgressSaveRef.current = true;
+    // Only show the reader after the first accurate pagination has restored
+    // the persisted position. Temporary pagination stays invisible.
+    setLoading(false);
     // Deliberately reflow only when reader layout settings change; the anchor keeps the reader in the same passage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
