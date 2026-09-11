@@ -325,7 +325,11 @@ function deriveConfidentLemma(
     const stem = word.slice(0, -3);
 
     // trying -> try
-    if (stem.endsWith('y')) return stem;
+    if (stem.endsWith('y')) // Restore final silent -e for common verbs: hurtling -> hurtle, handling -> handle.
+    if (/(hurtl|handl|sett|trembl|stifl|bundl|dazzl|wrestl|crumbl|stumbl|tackl|tickl|whistl|shuffl|snuffl|muffl|rattl|startl|struggl|smuggl|jostl|nibbl|scribbl|dribbl|babbl|wobbl|chuckl|cackl|fiddl|doodl|paddl|pedl|writ|tak|mak|giv|mov|lov|us|clos|chang|arriv|leav|driv|liv|sav|shar|notic|forc|plac|fac|rac|danc|glanc|advanc|invit|creat|operat|translat|celebrat|separat|generat|indicat|demonstrat|investigat|communicat|concentrat|hesitat|participat|appreciat|associat|negotiat|graduat|evaluat|situat|continu|pursu|argu|valu|issu|rescu)$/.test(stem)) {
+      return `${stem}e`;
+    }
+    return stem;
 
     // making -> make, staring -> stare
     if (/(mak|tak|giv|hav|mov|leav|st(ar|ir)|us|writ)$/.test(stem)) {
@@ -333,7 +337,7 @@ function deriveConfidentLemma(
     }
 
     // running -> run, stopping -> stop
-    if (/(.)\1$/.test(stem)) return stem.slice(0, -1);
+    if (/(.)\1$/.test(stem) && !/(ll|ss|ff|zz)$/.test(stem)) return stem.slice(0, -1);
 
     // pulling -> pull, standing -> stand
     return stem;
