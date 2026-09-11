@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'wouter';
-import { BookOpen, BookMarked, BarChart2, Settings, Sparkles } from 'lucide-react';
+import { BookOpen, BookMarked, BarChart2, Settings } from 'lucide-react';
 import { getTheme, applyTheme } from '@/lib/theme';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import logoUrl from '@/assets/english-books-logo.png';
@@ -44,10 +44,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
-        </div>
-        <div className="hidden md:block mt-auto rounded-2xl bg-sidebar-accent/70 p-4 text-sidebar-foreground/75">
-          <Sparkles size={16} className="text-sidebar-primary mb-2" />
-          <p className="font-serif text-sm leading-snug">Пять страниц сегодня — и английский становится ближе.</p>
         </div>
       </nav>}
       

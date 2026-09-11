@@ -5,6 +5,7 @@ import { paginateBook } from '@/lib/paginator';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { FONTS, getFontCss } from '@/lib/fonts';
 import { lookupWord, translateSentence, WordInfo, RuGroup } from '@/lib/wordlookup';
+import { getLemma } from '@/lib/lemma';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, X, Plus,
   Loader2, List, BookOpen, Languages, Microscope, Volume2, Maximize2, Minimize2, Type
@@ -112,12 +113,19 @@ function WordTooltip({
   state: TooltipState;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
-  onAdd: (word: string, translation: string) => void;
+  onAdd: (word: string, translation: string, lemma: string) => void;
 }) {
   const { word, x, y, info, loading } = state;
   const translation = info?.translation ?? '';
   const groups: RuGroup[] = info?.groups ?? [];
+  const lemma = getLemma(word);
   const [selectedGroup, setSelectedGroup] = React.useState(0);
+  const popupRef = React.useRef<HTMLDivElement>(null);
+  const [popupStyle, setPopupStyle] = React.useState<React.CSSProperties>({
+    left: Math.max(148, Math.min(window.innerWidth - 148, x)),
+    top: Math.max(14, y),
+    transform: 'translate(-50%, -100%)',
+  });
 
   React.useEffect(() => {
     setSelectedGroup(0);
@@ -140,10 +148,25 @@ function WordTooltip({
   const activeGroup = groups[selectedGroup] ?? groups[0];
   const activeVariants = activeGroup ? cleanVariants(activeGroup.words) : [];
 
-  // Clamp tooltip so it doesn't go off-screen left/right
-  const safeX = Math.max(148, Math.min(window.innerWidth - 148, x));
-  const opensDown = y < 210;
-  const safeY = opensDown ? Math.min(window.innerHeight - 18, y + 34) : Math.max(18, y);
+  React.useLayoutEffect(() => {
+    const popup = popupRef.current;
+    if (!popup) return;
+    const margin = 12;
+    const footerReserve = 44;
+    const rect = popup.getBoundingClientRect();
+    const safeBottom = window.innerHeight - footerReserve - margin;
+    const enoughBelow = safeBottom - y >= rect.height + margin;
+    const opensDown = enoughBelow || y < rect.height + margin;
+    const top = opensDown
+      ? Math.min(safeBottom - rect.height, y + 10)
+      : Math.max(margin, y - rect.height - 10);
+    const left = Math.max(margin + rect.width / 2, Math.min(window.innerWidth - margin - rect.width / 2, x));
+    setPopupStyle({
+      left,
+      top: Math.max(margin, top),
+      transform: 'translateX(-50%)',
+    });
+  }, [word, x, y, info, loading, selectedGroup, lemma]);
 
   return (
     <motion.div
@@ -151,12 +174,13 @@ function WordTooltip({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 6, scale: 0.96 }}
       transition={{ duration: 0.12 }}
-      className="fixed z-50 pointer-events-auto"
-       style={{ left: safeX, top: safeY, transform: opensDown ? 'translate(-50%, 0)' : 'translate(-50%, -100%)' }}
+       ref={popupRef}
+       className="fixed z-50 pointer-events-auto"
+       style={popupStyle}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <div className="bg-card border border-border shadow-2xl rounded-2xl w-[min(18rem,calc(100vw-2rem))] overflow-hidden">
+       <div className="bg-card border border-border shadow-2xl rounded-2xl w-[min(18rem,calc(100vw-2rem))] max-h-[calc(100dvh-4.5rem)] overflow-y-auto">
         {/* Header: word + speak button */}
         <div className="flex items-center gap-2 px-4 pt-4 pb-1">
           <span className="flex-1 font-bold text-xl text-foreground leading-tight">{word}</span>
@@ -185,6 +209,9 @@ function WordTooltip({
             <div className="mt-1 space-y-1">
               {/* Primary translation — bold */}
               <p data-testid="text-word-main-translation" className="text-base font-bold text-foreground">{translation}</p>
+              {lemma !== word && (
+                <p data-testid="text-word-lemma" className="text-xs text-muted-foreground pt-1">Начальная форма: <span className="font-semibold text-foreground/80">{lemma}</span></p>
+              )}
               {/* Parts of speech are selectable when the dictionary has several groups */}
               {groups.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 pt-2">
@@ -221,7 +248,7 @@ function WordTooltip({
         <div className="px-3 pb-3">
            <button data-testid="button-add-word" aria-label="Добавить слово в словарь"
             disabled={loading || !translation}
-            onClick={() => onAdd(word, translation)}
+             onClick={() => onAdd(word, translation, lemma)}
             className="w-full flex items-center justify-center gap-1.5 bg-primary/10 text-primary font-medium py-2 rounded-xl hover:bg-primary/20 transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Plus size={14} /> В словарь
@@ -327,6 +354,7 @@ export function ReaderPage() {
   const [currentPageIdx, setCurrentPageIdx] = useState(0);
   const [loading, setLoading] = useState(true);
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
+  const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight);
 
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -353,7 +381,10 @@ export function ReaderPage() {
   saveProgressRef.current = saveProgress;
 
   useEffect(() => {
-    const handleResize = () => setViewportWidth(window.innerWidth);
+    const handleResize = () => {
+      setViewportWidth(window.innerWidth);
+      setViewportHeight(window.innerHeight);
+    };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -410,10 +441,24 @@ export function ReaderPage() {
     const widthFactor = settings.pageWidth === 'narrow' ? 0.78 : settings.pageWidth === 'wide' ? 1.18 : 1;
     const fontFactor = 17 / Math.max(settings.fontSize, 13);
     const lineFactor = 1.65 / Math.max(settings.lineHeight, 1.3);
+    const panelWidth = viewportWidth >= 768
+      ? (showReaderSettings ? 390 : selectedSentence ? 380 : 0) + (showToc ? 280 : 0)
+      : 0;
+    const horizontalPadding = isMobileLayout
+      ? (settings.pageMargin === 'compact' ? 32 : settings.pageMargin === 'wide' ? 56 : 40)
+      : (settings.pageMargin === 'compact' ? 64 : settings.pageMargin === 'wide' ? 128 : 96);
+    const textWidth = Math.max(280, viewportWidth - panelWidth - horizontalPadding);
+    const averageCharacterWidth = Math.max(7, settings.fontSize * 0.52);
+    const charactersPerLine = Math.max(24, Math.floor(textWidth / averageCharacterWidth));
+    const verticalPadding = isMobileLayout ? 40 : 64;
+    const usableHeight = Math.max(180, viewportHeight - 56 - 36 - verticalPadding - 18);
+    const estimatedLines = Math.max(8, Math.floor(usableHeight / (settings.fontSize * settings.lineHeight)));
+    const maxChars = Math.max(420, Math.floor(estimatedLines * charactersPerLine * 0.78));
+    const paragraphsPerPage = Math.max(1, Math.floor(estimatedLines / 4));
     const { paginatedChapters } = paginateBook(
       book.content,
-      Math.max(2, Math.round((isMobileLayout ? 4 : 6) * widthFactor * lineFactor)),
-      Math.round((isMobileLayout ? 1700 : 2300) * widthFactor * fontFactor * lineFactor),
+      Math.max(1, Math.round(paragraphsPerPage * widthFactor * lineFactor * (settings.paragraphSpacing > 1 ? 0.9 : 1))),
+      Math.round(maxChars * widthFactor * fontFactor * lineFactor),
     );
     const nextPages: PageData[] = [];
     paginatedChapters.forEach(chapter => chapter.pages.forEach((paragraphs, pageIndex) => {
@@ -421,12 +466,31 @@ export function ReaderPage() {
     }));
     if (!nextPages.length) return;
     const anchor = readingAnchorRef.current;
-    const nextIndex = anchor ? Math.max(0, nextPages.findIndex(candidate => candidate.paragraphs.includes(anchor))) : currentPageIdx;
+    const nextIndex = anchor
+      ? Math.max(0, nextPages.findIndex(candidate => candidate.paragraphs.some(paragraph =>
+        paragraph === anchor || paragraph.startsWith(anchor) || anchor.startsWith(paragraph)
+      )))
+      : currentPageIdx;
     setPages(nextPages);
     setCurrentPageIdx(Math.min(nextIndex < 0 ? currentPageIdx : nextIndex, nextPages.length - 1));
     // Deliberately reflow only when reader layout settings change; the anchor keeps the reader in the same passage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [book, viewportWidth, settings.fontSize, settings.lineHeight, settings.pageWidth]);
+  }, [
+    book,
+    viewportWidth,
+    viewportHeight,
+    selectedSentence,
+    showReaderSettings,
+    showToc,
+    settings.fontFamily,
+    settings.fontSize,
+    settings.lineHeight,
+    settings.pageWidth,
+    settings.pageMargin,
+    settings.paragraphSpacing,
+    settings.firstLineIndent,
+    settings.textAlign,
+  ]);
 
   useEffect(() => {
     if (!book || pages.length === 0) return;
@@ -504,9 +568,10 @@ export function ReaderPage() {
     setTooltip(previous => previous?.word === word ? { ...previous, info, loading: false } : previous);
   };
 
-  const handleAddWord = async (word: string, translation: string, pos?: string) => {
-    await addWordToDictionary(word, translation, undefined, pos);
-    toast({ title: 'Добавлено в словарь', description: `"${word}" → ${translation}`, duration: 2000 });
+  const handleAddWord = async (word: string, translation: string, lemma?: string) => {
+    const dictionaryWord = lemma && lemma !== word ? lemma : word;
+    await addWordToDictionary(dictionaryWord, translation);
+    toast({ title: 'Добавлено в словарь', description: `"${dictionaryWord}" → ${translation}`, duration: 2000 });
     setTooltip(null);
   };
 
@@ -638,12 +703,12 @@ export function ReaderPage() {
         </AnimatePresence>
 
         {/* Reader */}
-        <main className={`flex-1 relative flex items-center justify-center overflow-hidden transition-all duration-300 ${selectedSentence ? 'md:mr-[380px]' : ''} ${showReaderSettings ? 'md:mr-[390px]' : ''} ${showToc ? 'md:ml-[280px]' : ''}`}>
-           <button data-testid="button-reader-prev" aria-label="Предыдущая страница" onClick={handlePrev} className="absolute left-0 top-0 bottom-0 w-[8%] md:w-14 hover:bg-foreground/[0.02] flex items-center justify-center transition-colors text-transparent hover:text-foreground/20 z-10">
-            <ChevronLeft size={36} />
+         <main className={`min-h-0 flex-1 relative flex items-center justify-center overflow-hidden transition-all duration-300 ${selectedSentence ? 'md:mr-[380px]' : ''} ${showReaderSettings ? 'md:mr-[390px]' : ''} ${showToc ? 'md:ml-[280px]' : ''}`}>
+            <button data-testid="button-reader-prev" aria-label="Предыдущая страница" onClick={handlePrev} className="absolute left-0 top-0 bottom-0 w-[8%] md:w-14 hover:bg-foreground/[0.02] flex items-center justify-center transition-colors text-transparent z-10">
+             <ChevronLeft size={18} aria-hidden="true" />
           </button>
-           <button data-testid="button-reader-next" aria-label="Следующая страница" onClick={handleNext} className="absolute right-0 top-0 bottom-0 w-[8%] md:w-14 hover:bg-foreground/[0.02] flex items-center justify-center transition-colors text-transparent hover:text-foreground/20 z-10">
-            <ChevronRight size={36} />
+            <button data-testid="button-reader-next" aria-label="Следующая страница" onClick={handleNext} className="absolute right-0 top-0 bottom-0 w-[8%] md:w-14 hover:bg-foreground/[0.02] flex items-center justify-center transition-colors text-transparent z-10">
+             <ChevronRight size={18} aria-hidden="true" />
           </button>
 
            <div className={`w-full ${widthClass} ${marginClass} py-5 sm:py-8 h-full overflow-hidden`}>

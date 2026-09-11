@@ -24,9 +24,7 @@ export function StatsPage() {
   return (
     <div className="page-container max-w-5xl">
       <header className="mb-8">
-        <p className="eyebrow">English Books • Reading Club</p>
         <h1 className="font-editorial text-4xl font-bold text-foreground">Прогресс</h1>
-        <p className="mt-2 text-muted-foreground">Только реальные данные чтения в этом браузере.</p>
       </header>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">

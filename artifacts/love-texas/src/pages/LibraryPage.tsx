@@ -4,8 +4,7 @@ import { BookCard } from '@/components/BookCard';
 import { parseEpub } from '@/lib/epub-parser';
 import { parseFb2 } from '@/lib/fb2-parser';
 import { paginateBook } from '@/lib/paginator';
-import { Plus, Book as BookIcon, BookOpen, LibraryBig, RefreshCw } from 'lucide-react';
-import { Star } from 'lucide-react';
+import { Plus, Book as BookIcon, BookOpen, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import backgroundUrl from '@/assets/english-books-background.png';
 
@@ -135,14 +134,7 @@ export function LibraryPage() {
       <div className="absolute -top-24 -right-28 w-80 h-80 rounded-full bg-accent/25 blur-3xl pointer-events-none" />
       <div className="relative mb-10 flex flex-col xl:flex-row xl:items-end justify-between gap-7">
         <div className="max-w-2xl">
-           <div className="americana-badge mb-3">
-            <Star size={12} fill="currentColor" /> <span>ENGLISH BOOKS</span><span className="opacity-55">•</span><span>READING CLUB</span>
-          </div>
-             <div className="flex items-center gap-2 library-copy text-xs font-bold uppercase tracking-[.2em] mb-3">
-            <LibraryBig size={15} /> Личная полка
-          </div>
              <h1 data-testid="text-library-title" className="font-editorial text-4xl sm:text-5xl font-semibold tracking-[-.04em] library-copy leading-[.98]">Книги, к которым<br /><em className="library-copy not-italic">хочется вернуться</em></h1>
-           <p className="library-copy-soft mt-4 max-w-lg leading-relaxed">Читайте в своём ритме и собирайте английский, который остаётся с вами.</p>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">

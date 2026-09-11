@@ -12,11 +12,12 @@ interface BookCardProps {
 export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
   const [, navigate] = useLocation();
   const levelColors: Record<string, string> = {
-    A1: 'bg-secondary text-secondary-foreground',
-    A2: 'bg-accent/50 text-foreground',
-    B1: 'bg-primary/15 text-primary',
-    B2: 'bg-destructive/10 text-destructive',
-    C1: 'bg-foreground/10 text-foreground',
+    A1: 'bg-[#f3e4cf] text-[#5b3827] border-[#c99d76]',
+    A2: 'bg-[#f2d1dc] text-[#6b3045] border-[#cf8da4]',
+    B1: 'bg-[#ead8ef] text-[#5b3d70] border-[#b995c9]',
+    B2: 'bg-[#f4d9c9] text-[#6e3420] border-[#d69b7e]',
+    C1: 'bg-[#d9e5df] text-[#294c3c] border-[#8fb2a1]',
+    C2: 'bg-[#d5e0ef] text-[#29466b] border-[#8ca9cf]',
   };
 
   const badgeColor = levelColors[book.level] || levelColors['B1'];
@@ -40,7 +41,7 @@ export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
       onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(`/reader/${book.id}`); } }}
     >
       {/* Cover */}
-        <div className="relative w-full overflow-hidden bg-muted" style={{ paddingBottom: '120%' }}>
+        <div className="relative w-full aspect-[2/3] overflow-hidden bg-muted">
         <div className="absolute inset-0 book-spine">
           {book.coverUrl ? (
             <img
@@ -58,7 +59,7 @@ export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
 
           {/* Level badge */}
           <div className="absolute top-2 right-2">
-              <span data-testid={`badge-level-${book.id}`} className={`px-2 py-0.5 text-xs font-bold rounded-full ${badgeColor}`}>
+               <span data-testid={`badge-level-${book.id}`} className={`px-2 py-0.5 text-[11px] font-bold rounded-full border shadow-sm ${badgeColor}`}>
               {book.level || 'B1'}
             </span>
           </div>

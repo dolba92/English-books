@@ -167,10 +167,6 @@ export async function parseEpub(file: File): Promise<{
         ? await imageDataUrl(zip, guideItem)
         : await findImageInCoverPage(zip, guideItem, manifest);
     }
-    if (!coverUrl) {
-      const firstImage = manifest.find(item => item.mediaType.startsWith('image/'));
-      if (firstImage) coverUrl = await imageDataUrl(zip, firstImage);
-    }
   } catch {
     // A missing or malformed cover must not prevent opening the book.
   }

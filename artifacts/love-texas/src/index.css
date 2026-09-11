@@ -319,6 +319,10 @@
   .book-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.5rem; }
 }
 
+@media (min-width: 1280px) {
+  .book-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1.5rem; }
+}
+
 @media (max-width: 767px) {
   .page-container { padding-bottom: 6rem; }
   .reader-settings, .sentence-panel { top: auto; right: 0; bottom: 0; left: 0; width: 100%; max-height: 82dvh; border-left: 0; border-top: 1px solid hsl(var(--border)); border-radius: 1.2rem 1.2rem 0 0; }

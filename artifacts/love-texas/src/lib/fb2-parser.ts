@@ -20,11 +20,15 @@ export async function parseFb2(file: File) {
         // Cover
         let coverUrl: string | undefined = undefined;
         const binaryNodes = xmlDoc.getElementsByTagName("binary");
+        const coverPage = xmlDoc.getElementsByTagName("coverpage")[0];
+        const coverImage = coverPage?.getElementsByTagName("*")[0];
+        const coverRef = coverImage?.getAttribute("l:href") || coverImage?.getAttribute("href") || "";
+        const explicitCoverId = coverRef.replace(/^#/, "");
         if (binaryNodes.length > 0) {
            for (let i = 0; i < binaryNodes.length; i++) {
              const node = binaryNodes[i];
              const id = node.getAttribute("id");
-             if (id && (id.includes("cover") || i === 0)) {
+             if (id && (id === explicitCoverId || /cover/i.test(id))) {
                const contentType = node.getAttribute("content-type") || "image/jpeg";
                const base64 = node.textContent?.trim();
                if (base64) {
