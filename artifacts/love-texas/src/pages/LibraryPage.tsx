@@ -4,190 +4,10 @@ import { BookCard } from '@/components/BookCard';
 import { parseEpub } from '@/lib/epub-parser';
 import { parseFb2 } from '@/lib/fb2-parser';
 import { paginateBook } from '@/lib/paginator';
+import { analyzeBookLevel } from '@/lib/book-level';
 import { Book as BookIcon, BookOpen, Plus, RefreshCw } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import backgroundUrl from '@/assets/english-books-background.png';
-
-type Level = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
-
-const VERY_COMMON_WORDS = new Set(
-  `
-  the be to of and a in that have i it for not on with he as you do at this but
-  his by from they we say her she or an will my one all would there their what so
-  up out if about who get which go me when make can like time no just him know take
-  people into year your good some could them see other than then now look only come
-  its over think also back after use two how our work first well way even new want
-  because these give day most us is are was were been being am has had does did
-  went gone going made came saw seen got took taken said thought knew known gave
-  given found felt left put keep kept let begin began begun seem help talk turn
-  start show hear heard play run move live bring happen write sit stand learn
-  change understand watch follow stop speak read walk remember love wait stay fall
-  reach pass return hope carry break eat catch choose listen close pick wear drive
-  sleep drink try need feel become leave call ask tell find man woman child children
-  boy girl person family mother father sister brother friend house home room school
-  book word water food night morning week world life hand eye face head name thing
-  place door car road town question problem story side kind lot end enough little
-  long great old young big small high low right wrong same different important
-  possible sure happy sorry afraid angry hard easy early late near far together
-  again always never often sometimes very really too more less many much few
-  another every each both own such still already almost perhaps maybe here where
-  why how before during without under above between around through while until since
-  `.trim().split(/\s+/)
-);
-
-const ADVANCED_MARKERS = new Set(
-  `
-  impenetrability notwithstanding nevertheless consequently furthermore moreover
-  whereas whereby albeit thereby therein insofar ostensibly presumably subsequently
-  unprecedented inevitable sophisticated substantial considerable significant
-  controversial conventional phenomenon perspective implication circumstance
-  acquisition acknowledge demonstrate establish constitute indicate interpret
-  perceive pursue sufficient undertake retain emerge encounter ambiguity
-  intricate inherent arbitrary plausible profound subtle coherent
-  `.trim().split(/\s+/)
-);
-
-function countSyllables(word: string): number {
-  let cleaned = word.toLowerCase().replace(/[^a-z]/g, '');
-  if (!cleaned) return 1;
-  if (cleaned.length <= 3) return 1;
-
-  cleaned = cleaned
-    .replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '')
-    .replace(/^y/, '');
-
-  const groups = cleaned.match(/[aeiouy]+/g);
-  return Math.max(1, groups?.length || 1);
-}
-
-function estimateBookLevel(chapters: Array<{ paragraphs?: string[] }>): Level {
-  /*
-   * Book-oriented CEFR estimate.
-   *
-   * CEFR is formally a learner proficiency scale, not a property that can be
-   * calculated exactly from a novel. For the library badge we therefore combine:
-   *   1) sentence length / syntax,
-   *   2) syllabic readability,
-   *   3) lexical rarity proxy,
-   *   4) long-word density,
-   *   5) explicit advanced-vocabulary markers.
-   *
-   * A1/A2 are intentionally reserved for genuinely simple / graded-reader-like
-   * prose. C2 is intentionally rare.
-   */
-  const MAX_WORDS = 40000;
-  const chunks: string[] = [];
-  let collectedWords = 0;
-
-  outer: for (const chapter of chapters || []) {
-    for (const paragraph of chapter?.paragraphs || []) {
-      if (!paragraph) continue;
-      chunks.push(paragraph);
-      collectedWords += (paragraph.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || []).length;
-      if (collectedWords >= MAX_WORDS) break outer;
-    }
-  }
-
-  const text = chunks.join(' ');
-  const rawWords = text.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || [];
-  if (rawWords.length < 120) return 'B1';
-
-  const words = rawWords
-    .map((word) => word.toLowerCase().replace(/[’']/g, ''))
-    .filter(Boolean);
-
-  const sentenceParts = text
-    .replace(/[“”"']/g, '')
-    .split(/[.!?]+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  const sentenceCount = Math.max(1, sentenceParts.length);
-
-  let syllables = 0;
-  let longWords = 0;
-  let veryLongWords = 0;
-  let uncommonLongWords = 0;
-  let advancedMarkers = 0;
-
-  for (const word of words) {
-    syllables += countSyllables(word);
-
-    if (word.length >= 8) longWords += 1;
-    if (word.length >= 11) veryLongWords += 1;
-
-    if (
-      word.length >= 7 &&
-      !VERY_COMMON_WORDS.has(word) &&
-      !/^\d+$/.test(word)
-    ) {
-      uncommonLongWords += 1;
-    }
-
-    if (ADVANCED_MARKERS.has(word)) advancedMarkers += 1;
-  }
-
-  const avgSentenceLength = words.length / sentenceCount;
-  const avgSyllablesPerWord = syllables / words.length;
-  const longWordRatio = longWords / words.length;
-  const veryLongWordRatio = veryLongWords / words.length;
-  const uncommonLongRatio = uncommonLongWords / words.length;
-  const advancedMarkerRate = advancedMarkers / words.length;
-
-  const flesch =
-    206.835 -
-    1.015 * avgSentenceLength -
-    84.6 * avgSyllablesPerWord;
-
-  // Weighted difficulty. The lexical terms matter more for novels than raw
-  // sentence length, preventing descriptive adult fiction from becoming A1/A2.
-  let difficulty = 0;
-
-  difficulty += Math.max(0, Math.min(28, (80 - flesch) * 0.36));
-  difficulty += Math.max(0, Math.min(18, (avgSentenceLength - 9) * 1.05));
-  difficulty += Math.max(0, Math.min(18, (avgSyllablesPerWord - 1.30) * 50));
-  difficulty += Math.min(14, longWordRatio * 75);
-  difficulty += Math.min(10, veryLongWordRatio * 110);
-  difficulty += Math.min(18, uncommonLongRatio * 70);
-  difficulty += Math.min(8, advancedMarkerRate * 1800);
-
-  // Extra guardrails for authentic prose. A book with substantial lexical
-  // density cannot be labelled beginner just because it contains short sentences.
-  const clearlyNotA1 =
-    uncommonLongRatio > 0.075 ||
-    longWordRatio > 0.105 ||
-    avgSyllablesPerWord > 1.43 ||
-    avgSentenceLength > 12;
-
-  const clearlyNotA2 =
-    uncommonLongRatio > 0.115 ||
-    longWordRatio > 0.155 ||
-    avgSyllablesPerWord > 1.52 ||
-    avgSentenceLength > 16;
-
-  let level: Level;
-  if (difficulty < 20) level = 'A1';
-  else if (difficulty < 30) level = 'A2';
-  else if (difficulty < 43) level = 'B1';
-  else if (difficulty < 57) level = 'B2';
-  else if (difficulty < 75) level = 'C1';
-  else level = 'C2';
-
-  if (level === 'A1' && clearlyNotA1) level = 'A2';
-  if ((level === 'A1' || level === 'A2') && clearlyNotA2) level = 'B1';
-
-  // Full native novels with visibly dense vocabulary should not receive a
-  // beginner badge. This still allows genuinely simple graded books to be A1/A2.
-  if (
-    (level === 'A1' || level === 'A2') &&
-    words.length >= 5000 &&
-    (uncommonLongRatio > 0.09 || longWordRatio > 0.13)
-  ) {
-    level = 'B1';
-  }
-
-  return level;
-}
 
 export function LibraryPage() {
   const [books, setBooks] = useState<{ book: Book; progress: number }[]>([]);
@@ -201,23 +21,23 @@ export function LibraryPage() {
       setError('');
 
       const allBooks = await getAllBooks();
-
       const booksWithProgress = await Promise.all(
         allBooks.map(async (book) => {
           const prog = await getProgress(book.id!);
           const actualPageCount = paginateBook(book.content, 6).totalPages;
-          const estimatedLevel = estimateBookLevel(book.content);
+          const levelAnalysis = analyzeBookLevel(book.content);
 
-          const updatedBook = {
+          // Для уже загруженных книг уровень пересчитывается прямо из текста
+          // при открытии библиотеки. Ничего перезагружать или удалять не нужно.
+          //
+          // В IndexedDB здесь специально ничего не перезаписываем:
+          // saveBook() также создаёт/обновляет запись прогресса, поэтому
+          // пересчёт уровня не должен рисковать сбросом позиции чтения.
+          const updatedBook: Book = {
             ...book,
             totalPages: actualPageCount,
-            level: estimatedLevel,
+            level: levelAnalysis.level,
           };
-
-          // Keep recalculated CEFR for already imported books too.
-          if (book.level !== estimatedLevel || book.totalPages !== actualPageCount) {
-            await saveBook(updatedBook);
-          }
 
           return {
             book: updatedBook,
@@ -266,7 +86,7 @@ export function LibraryPage() {
         await saveBook({
           title: 'The Little Prince (Sample)',
           author: 'Antoine de Saint-Exupéry',
-          level: estimateBookLevel(sampleContent),
+          level: analyzeBookLevel(sampleContent).level,
           fileSizeKb: 10,
           addedAt: Date.now(),
           totalPages: 2,
@@ -299,12 +119,13 @@ export function LibraryPage() {
       }
 
       const { totalPages } = paginateBook(parsed.chapters, 6);
+      const levelAnalysis = analyzeBookLevel(parsed.chapters);
 
       await saveBook({
         title: parsed.title,
         author: parsed.author,
         coverUrl: parsed.coverUrl,
-        level: estimateBookLevel(parsed.chapters),
+        level: levelAnalysis.level,
         content: parsed.chapters,
         fileSizeKb: Math.round(file.size / 1024),
         addedAt: Date.now(),
