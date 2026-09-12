@@ -384,6 +384,12 @@ export function analyzeBookLevel(
       ? (unknownWeight / totalVocabularyWeight) * 100
       : 0;
 
+  const sentenceLengths = sentences
+    .map(sentence =>
+      (sentence.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || []).length
+    )
+    .filter(length => length > 0 && length < 120);
+
   const averageSentenceLength =
     sentenceLengths.reduce((a, b) => a + b, 0) /
     Math.max(1, sentenceLengths.length);
@@ -403,12 +409,6 @@ export function analyzeBookLevel(
     averageSentenceLength,
     longWordRatio,
   });
-
-  const sentenceLengths = sentences
-    .map(sentence =>
-      (sentence.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || []).length
-    )
-    .filter(length => length > 0 && length < 120);
 
   const windowDiversity: number[] = [];
   for (let i = 0; i < lemmas.length; i += 500) {
