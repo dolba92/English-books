@@ -4,13 +4,19 @@ import { BookCard } from '@/components/BookCard';
 import { parseEpub } from '@/lib/epub-parser';
 import { parseFb2 } from '@/lib/fb2-parser';
 import { paginateBook } from '@/lib/paginator';
-import { analyzeBookLevel } from '@/lib/book-level';
+import { analyzeBookLevel, BookLevelAnalysis } from '@/lib/book-level';
 import { Book as BookIcon, BookOpen, Plus, RefreshCw } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import backgroundUrl from '@/assets/english-books-background.png';
 
+type LibraryItem = {
+  book: Book;
+  progress: number;
+  analysis: BookLevelAnalysis;
+};
+
 export function LibraryPage() {
-  const [books, setBooks] = useState<{ book: Book; progress: number }[]>([]);
+  const [books, setBooks] = useState<LibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
@@ -27,12 +33,6 @@ export function LibraryPage() {
           const actualPageCount = paginateBook(book.content, 6).totalPages;
           const levelAnalysis = analyzeBookLevel(book.content);
 
-          // Для уже загруженных книг уровень пересчитывается прямо из текста
-          // при открытии библиотеки. Ничего перезагружать или удалять не нужно.
-          //
-          // В IndexedDB здесь специально ничего не перезаписываем:
-          // saveBook() также создаёт/обновляет запись прогресса, поэтому
-          // пересчёт уровня не должен рисковать сбросом позиции чтения.
           const updatedBook: Book = {
             ...book,
             totalPages: actualPageCount,
@@ -42,6 +42,7 @@ export function LibraryPage() {
           return {
             book: updatedBook,
             progress: prog?.percentComplete || 0,
+            analysis: levelAnalysis,
           };
         })
       );
@@ -206,6 +207,10 @@ export function LibraryPage() {
             {books.length} {books.length === 1 ? 'книга' : 'книг'}
           </span>
         </div>
+
+        <div className="inline-flex items-center rounded-full bg-amber-50/85 border border-amber-200 px-3.5 py-2 text-xs text-amber-950 shadow-sm">
+          Диагностика CEFR включена
+        </div>
       </div>
 
       {error && (
@@ -250,6 +255,36 @@ export function LibraryPage() {
                   progress={item.progress}
                   onDelete={handleDelete}
                 />
+
+                <div className="mt-2 rounded-xl border border-black/10 bg-white/90 p-2.5 text-[10px] leading-[1.35] text-stone-700 shadow-sm">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <strong className="text-[11px] text-stone-900">
+                      CEFR: {item.analysis.level}
+                    </strong>
+                    <strong className="text-[11px] text-fuchsia-800">
+                      score {item.analysis.score}
+                    </strong>
+                  </div>
+
+                  <div>
+                    sentences: <b>{item.analysis.averageSentenceLength}</b>
+                  </div>
+                  <div>
+                    word length: <b>{item.analysis.averageWordLength}</b>
+                  </div>
+                  <div>
+                    long words: <b>{(item.analysis.longWordRatio * 100).toFixed(1)}%</b>
+                  </div>
+                  <div>
+                    advanced: <b>{(item.analysis.advancedWordRatio * 100).toFixed(1)}%</b>
+                  </div>
+                  <div>
+                    diversity: <b>{item.analysis.lexicalDiversity}</b>
+                  </div>
+                  <div>
+                    sample: <b>{item.analysis.sampledWords}</b> words
+                  </div>
+                </div>
               </motion.div>
             ))}
           </div>
