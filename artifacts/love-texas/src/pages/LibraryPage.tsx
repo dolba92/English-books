@@ -257,32 +257,27 @@ export function LibraryPage() {
                 />
 
                 <div className="mt-2 rounded-xl border border-black/10 bg-white/90 p-2.5 text-[10px] leading-[1.35] text-stone-700 shadow-sm">
-                  <div className="mb-1 flex items-center justify-between gap-2">
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
                     <strong className="text-[11px] text-stone-900">
                       CEFR: {item.analysis.level}
                     </strong>
                     <strong className="text-[11px] text-fuchsia-800">
-                      score {item.analysis.score}
+                      сложность {item.analysis.readingDifficulty}/5
                     </strong>
                   </div>
 
-                  <div>
-                    sentences: <b>{item.analysis.averageSentenceLength}</b>
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+                    <div>A1: <b>{item.analysis.coverageA1}%</b></div>
+                    <div>A2: <b>{item.analysis.coverageA2}%</b></div>
+                    <div>B1: <b>{item.analysis.coverageB1}%</b></div>
+                    <div>B2: <b>{item.analysis.coverageB2}%</b></div>
+                    <div>C1: <b>{item.analysis.coverageC1}%</b></div>
+                    <div>вне EFLLex: <b>{item.analysis.unknownRatio}%</b></div>
                   </div>
-                  <div>
-                    word length: <b>{item.analysis.averageWordLength}</b>
-                  </div>
-                  <div>
-                    long words: <b>{(item.analysis.longWordRatio * 100).toFixed(1)}%</b>
-                  </div>
-                  <div>
-                    advanced: <b>{(item.analysis.advancedWordRatio * 100).toFixed(1)}%</b>
-                  </div>
-                  <div>
-                    diversity: <b>{item.analysis.lexicalDiversity}</b>
-                  </div>
-                  <div>
-                    sample: <b>{item.analysis.sampledWords}</b> words
+
+                  <div className="mt-1.5 border-t border-stone-200 pt-1">
+                    предложения: <b>{item.analysis.averageSentenceLength}</b> слов ·
+                    выборка: <b>{item.analysis.sampledWords}</b>
                   </div>
                 </div>
               </motion.div>
