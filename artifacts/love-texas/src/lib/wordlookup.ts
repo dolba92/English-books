@@ -1,3 +1,5 @@
+import { getLemma } from '@/lib/lemma';
+
 /**
  * Word lookup — fast primary translation + richer dictionary variants.
  * The visible word may be inflected ("leans"), while dictionary variants are
@@ -287,107 +289,105 @@ function deriveConfidentLemma(
   const word = surface.toLowerCase().replace(/[^a-z'-]/g, '');
   if (!word) return undefined;
 
-  const irregular: Record<string, string> = {
-    am: 'be', is: 'be', are: 'be', was: 'be', were: 'be',
-    been: 'be', being: 'be',
-    has: 'have', had: 'have',
-    does: 'do', did: 'do', doing: 'do',
-    went: 'go', gone: 'go',
-    saw: 'see', seen: 'see',
-    said: 'say',
-    made: 'make',
-    took: 'take', taken: 'take',
-    came: 'come',
-    ran: 'run',
-    wrote: 'write', written: 'write',
-    spoke: 'speak', spoken: 'speak',
-    thought: 'think',
-    brought: 'bring',
-    bought: 'buy',
-    caught: 'catch',
-    taught: 'teach',
-    knew: 'know',
-    told: 'tell',
-    found: 'find',
-    gave: 'give',
-    got: 'get',
-    felt: 'feel',
-    left: 'leave',
-    kept: 'keep',
-    held: 'hold',
-    lost: 'lose',
-    met: 'meet',
+  const known = getLemma(word);
+  if (known && known !== word) return known;
+
+  const nonInflecting = new Set([
+    'something', 'nothing', 'anything', 'everything',
+    'morning', 'evening', 'during', 'ceiling',
+    'darling', 'sterling', 'spring', 'king', 'thing',
+  ]);
+  if (nonInflecting.has(word)) return undefined;
+
+  const exact: Record<string, string> = {
+    escaping: 'escape',
+    hurtling: 'hurtle',
+    sitting: 'sit',
+    shining: 'shine',
+    shines: 'shine',
+    hurried: 'hurry',
+    hurrying: 'hurry',
+    trying: 'try',
+    tried: 'try',
+    lying: 'lie',
+    dying: 'die',
+    tying: 'tie',
+    begins: 'begin',
+    beginning: 'begin',
+    murmurs: 'murmur',
+    standing: 'stand',
+    stands: 'stand',
+    staring: 'stare',
+    looking: 'look',
+    breaking: 'break',
+    pulled: 'pull',
+    pulling: 'pull',
+    replaced: 'replace',
+    stained: 'stain',
+    doused: 'douse',
+    leaves: 'leave',
+    says: 'say',
+    means: 'mean',
+    seeps: 'seep',
+    slurs: 'slur',
   };
-  if (irregular[word]) return irregular[word];
+  if (exact[word]) return exact[word];
 
-  // -ing is usually safe once the sentence classifier says "verb".
-  if (preferredPos === 'verb' && word.endsWith('ing') && word.length > 5) {
-    const stem = word.slice(0, -3);
-
-    // trying -> try
-    if (stem.endsWith('y')) // Restore final silent -e for common verbs: hurtling -> hurtle, handling -> handle.
-    if (/(hurtl|handl|sett|trembl|stifl|bundl|dazzl|wrestl|crumbl|stumbl|tackl|tickl|whistl|shuffl|snuffl|muffl|rattl|startl|struggl|smuggl|jostl|nibbl|scribbl|dribbl|babbl|wobbl|chuckl|cackl|fiddl|doodl|paddl|pedl|writ|tak|mak|giv|mov|lov|us|clos|chang|arriv|leav|driv|liv|sav|shar|notic|forc|plac|fac|rac|danc|glanc|advanc|invit|creat|operat|translat|celebrat|separat|generat|indicat|demonstrat|investigat|communicat|concentrat|hesitat|participat|appreciat|associat|negotiat|graduat|evaluat|situat|continu|pursu|argu|valu|issu|rescu)$/.test(stem)) {
-      return `${stem}e`;
-    }
-    return stem;
-
-    // making -> make, staring -> stare
-    if (/(mak|tak|giv|hav|mov|leav|st(ar|ir)|us|writ)$/.test(stem)) {
-      return `${stem}e`;
+  if (preferredPos === 'verb') {
+    if (word.endsWith('ied') && word.length > 4) {
+      return `${word.slice(0, -3)}y`;
     }
 
-    // running -> run, stopping -> stop
-    if (/(.)\1$/.test(stem) && !/(ll|ss|ff|zz)$/.test(stem)) return stem.slice(0, -1);
+    if (word.endsWith('ed') && word.length > 4) {
+      let stem = word.slice(0, -2);
 
-    // pulling -> pull, standing -> stand
-    return stem;
-  }
+      if (/(ll|ss|ff|zz)$/.test(stem)) return stem;
+      if (/(.)\1$/.test(stem)) return stem.slice(0, -1);
 
-  // -ed once context says verb.
-  if (preferredPos === 'verb' && word.endsWith('ed') && word.length > 4) {
-    const stem = word.slice(0, -2);
+      if (/(mov|lov|us|clos|chang|arriv|replac|dous|escap|notic|forc|plac|fac|rac|danc|glanc|invit|creat)$/.test(stem)) {
+        return `${stem}e`;
+      }
 
-    // Some verbs already end in a doubled consonant:
-    // pull -> pulled, call -> called, miss -> missed, buzz -> buzzed.
-    // Do not turn them into "pul", "cal", "mis", "buz".
-    if (/(ll|ss|ff|zz)$/.test(stem)) return stem;
+      return stem;
+    }
 
-    // Doubling added by the past-tense spelling rule:
-    // stop -> stopped, plan -> planned.
-    if (/(.)\1$/.test(stem)) return stem.slice(0, -1);
+    if (word.endsWith('ing') && word.length > 5) {
+      let stem = word.slice(0, -3);
 
-    if (/(mov|lov|us|clos|chang|arriv|replac|dou|stain)$/.test(stem)) return `${stem}e`;
-    return stem;
-  }
+      if (/(.)\1$/.test(stem) && !/(ll|ss|ff|zz)$/.test(stem)) {
+        return stem.slice(0, -1);
+      }
 
-  // Ambiguous -s forms are normalized ONLY because context already decided POS.
-  if ((preferredPos === 'verb' || preferredPos === 'noun') && word.endsWith('s') && word.length > 3) {
+      if (/(mak|tak|giv|hav|mov|leav|writ|us|clos|chang|arriv|escap|hurtl|handl|sett|trembl|stifl|bundl|dazzl|wrestl|crumbl|stumbl|tackl|tickl|whistl|shuffl|snuffl|muffl|rattl|startl|struggl|smuggl|jostl|nibbl|scribbl|dribbl|babbl|wobbl|chuckl|cackl|fiddl|doodl|paddl|pedl|notic|forc|plac|fac|rac|danc|glanc|advanc|invit|creat|operat|translat|celebrat|separat|generat|indicat|demonstrat|investigat|communicat|concentrat|hesitat|participat|appreciat|associat|negotiat|graduat|evaluat|situat|continu|pursu|argu|valu|issu|rescu)$/.test(stem)) {
+        return `${stem}e`;
+      }
+
+      return stem;
+    }
+
     if (word.endsWith('ies') && word.length > 4) {
       return `${word.slice(0, -3)}y`;
     }
 
-    if (preferredPos === 'verb') {
-      // says -> say
-      if (word === 'says') return 'say';
-
-      // leaves -> leave, uses -> use
-      if (/(aves|uses|moves|loves|gives|takes|makes)$/.test(word)) {
-        return word.slice(0, -1);
-      }
-
-      // watches -> watch, passes -> pass
-      if (/(ches|shes|sses|xes|zes)$/.test(word)) {
-        return word.slice(0, -2);
-      }
-
-      // means -> mean, murmurs -> murmur, leans -> lean
-      return word.slice(0, -1);
+    if (word.endsWith('es') && /(ches|shes|sses|xes|zes|oes)$/.test(word)) {
+      return word.slice(0, -2);
     }
 
-    if (preferredPos === 'noun') {
-      if (/(ches|shes|sses|xes|zes)$/.test(word)) {
-        return word.slice(0, -2);
-      }
+    if (word.endsWith('s') && !word.endsWith('ss') && word.length > 3) {
+      return word.slice(0, -1);
+    }
+  }
+
+  if (preferredPos === 'noun') {
+    if (word.endsWith('ies') && word.length > 4) {
+      return `${word.slice(0, -3)}y`;
+    }
+
+    if (word.endsWith('es') && /(ches|shes|sses|xes|zes)$/.test(word)) {
+      return word.slice(0, -2);
+    }
+
+    if (word.endsWith('s') && !word.endsWith('ss') && word.length > 3) {
       return word.slice(0, -1);
     }
   }
