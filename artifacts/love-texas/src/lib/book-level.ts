@@ -5,9 +5,20 @@ export type CefrLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
 
 export interface BookLevelAnalysis {
   level: CefrLevel;
-  readingBand: string;
-  comfortableLevel: CefrLevel;
   score: number;
+
+  // New diagnostics: cumulative vocabulary coverage.
+  coverageA1: number;
+  coverageA2: number;
+  coverageB1: number;
+  coverageB2: number;
+  coverageC1: number;
+  unknownRatio: number;
+
+  // Separate reading/syntax difficulty, Linga-style.
+  readingDifficulty: 1 | 2 | 3 | 4 | 5;
+
+  // Existing diagnostics kept so LibraryPage does not break.
   averageSentenceLength: number;
   averageWordLength: number;
   longWordRatio: number;
@@ -17,125 +28,228 @@ export interface BookLevelAnalysis {
 }
 
 const IRREGULAR: Record<string, string> = {
-  children:'child', men:'man', women:'woman', feet:'foot', teeth:'tooth', mice:'mouse',
-  went:'go', gone:'go', came:'come', saw:'see', seen:'see', knew:'know', known:'know',
-  thought:'think', brought:'bring', bought:'buy', caught:'catch', taught:'teach',
-  heard:'hear', felt:'feel', left:'leave', kept:'keep', slept:'sleep', stood:'stand',
-  understood:'understand', wrote:'write', written:'write', spoke:'speak', spoken:'speak',
-  took:'take', taken:'take', gave:'give', given:'give', made:'make', ran:'run'
+  children: 'child',
+  men: 'man',
+  women: 'woman',
+  feet: 'foot',
+  teeth: 'tooth',
+  mice: 'mouse',
+  went: 'go',
+  gone: 'go',
+  came: 'come',
+  saw: 'see',
+  seen: 'see',
+  knew: 'know',
+  known: 'know',
+  thought: 'think',
+  brought: 'bring',
+  bought: 'buy',
+  caught: 'catch',
+  taught: 'teach',
+  heard: 'hear',
+  felt: 'feel',
+  left: 'leave',
+  kept: 'keep',
+  slept: 'sleep',
+  stood: 'stand',
+  understood: 'understand',
+  wrote: 'write',
+  written: 'write',
+  spoke: 'speak',
+  spoken: 'speak',
+  took: 'take',
+  taken: 'take',
+  gave: 'give',
+  given: 'give',
+  made: 'make',
+  ran: 'run',
 };
 
-function clean(w: string) {
-  return w.toLowerCase().replace(/[’]/g, "'").replace(/^[^a-z]+|[^a-z]+$/g, '');
+function cleanWord(word: string): string {
+  return word
+    .toLowerCase()
+    .replace(/[’]/g, "'")
+    .replace(/^[^a-z]+|[^a-z]+$/g, '');
 }
 
-function hasProfile(w: string) {
-  return !!getEfllexProfile(w);
+function hasProfile(word: string): boolean {
+  return !!getEfllexProfile(word);
 }
 
-function lemma(w: string): string {
-  if (IRREGULAR[w]) return IRREGULAR[w];
-  if (hasProfile(w)) return w;
+function lemma(word: string): string {
+  if (IRREGULAR[word]) return IRREGULAR[word];
+  if (hasProfile(word)) return word;
 
   const candidates: string[] = [];
-  if (w.endsWith('ies') && w.length > 4) candidates.push(w.slice(0, -3) + 'y');
-  if (w.endsWith('ied') && w.length > 4) candidates.push(w.slice(0, -3) + 'y');
 
-  if (w.endsWith('ing') && w.length > 5) {
-    const s = w.slice(0, -3);
-    candidates.push(s, s + 'e');
-    if (/(.)\1$/.test(s)) candidates.push(s.slice(0, -1));
+  if (word.endsWith('ies') && word.length > 4) {
+    candidates.push(word.slice(0, -3) + 'y');
   }
 
-  if (w.endsWith('ed') && w.length > 4) {
-    const s = w.slice(0, -2);
-    candidates.push(s, s + 'e');
-    if (/(.)\1$/.test(s)) candidates.push(s.slice(0, -1));
+  if (word.endsWith('ied') && word.length > 4) {
+    candidates.push(word.slice(0, -3) + 'y');
   }
 
-  if (w.endsWith('es') && w.length > 4) candidates.push(w.slice(0, -2), w.slice(0, -1));
-  if (w.endsWith('s') && w.length > 3) candidates.push(w.slice(0, -1));
+  if (word.endsWith('ing') && word.length > 5) {
+    const stem = word.slice(0, -3);
+    candidates.push(stem, stem + 'e');
+    if (/(.)\1$/.test(stem)) candidates.push(stem.slice(0, -1));
+  }
 
-  return candidates.find(hasProfile) || w;
+  if (word.endsWith('ed') && word.length > 4) {
+    const stem = word.slice(0, -2);
+    candidates.push(stem, stem + 'e');
+    if (/(.)\1$/.test(stem)) candidates.push(stem.slice(0, -1));
+  }
+
+  if (word.endsWith('es') && word.length > 4) {
+    candidates.push(word.slice(0, -2), word.slice(0, -1));
+  }
+
+  if (word.endsWith('s') && word.length > 3) {
+    candidates.push(word.slice(0, -1));
+  }
+
+  return candidates.find(hasProfile) || word;
 }
 
-function sampleBook(chapters: BookChapter[], target = 18000) {
+function sampleBook(chapters: BookChapter[], targetWords = 22000): string {
   const paragraphs = chapters
-    .flatMap(c => c.paragraphs || [])
-    .map(p => p.replace(/\s+/g, ' ').trim())
-    .filter(p => p.length >= 40);
+    .flatMap(chapter => chapter.paragraphs || [])
+    .map(text => text.replace(/\s+/g, ' ').trim())
+    .filter(text => text.length >= 40);
 
   if (!paragraphs.length) return '';
 
-  const count = Math.min(paragraphs.length, 320);
-  const step = paragraphs.length / count;
-  const out: string[] = [];
+  const sampleCount = Math.min(paragraphs.length, 380);
+  const step = paragraphs.length / sampleCount;
+  const picked: string[] = [];
 
-  for (let i = 0; i < count; i++) {
-    out.push(paragraphs[Math.min(paragraphs.length - 1, Math.floor(i * step))]);
+  for (let i = 0; i < sampleCount; i++) {
+    picked.push(
+      paragraphs[Math.min(paragraphs.length - 1, Math.floor(i * step))]
+    );
   }
 
-  return out.join(' ').split(/\s+/).slice(0, target).join(' ');
+  return picked.join(' ').split(/\s+/).slice(0, targetWords).join(' ');
 }
 
-function splitSentences(text: string) {
+function splitSentences(text: string): string[] {
   return text
     .replace(/([.!?])["”’)]/g, '$1 ')
     .split(/[.!?]+(?:\s+|$)/)
-    .map(s => s.trim())
-    .filter(s => s.length > 8);
+    .map(sentence => sentence.trim())
+    .filter(sentence => sentence.length > 8);
 }
 
-function syntaxComplexity(s: string) {
-  const x = s.toLowerCase();
-  const markers =
-    /\b(although|though|whereas|while|unless|despite|whilst|whenever|wherever|however|which|whose|whom|whether)\b/g;
+/**
+ * EFLLex gives a frequency profile across A1, A2, B1, B2, C1.
+ * We convert that profile to an "entry tier":
+ * the first level where the word has reached a meaningful share
+ * of its strongest textbook frequency.
+ *
+ * This avoids forcing every word into the level where its raw
+ * frequency happens to peak.
+ */
+function tierFromProfile(profile: readonly number[]): number {
+  const max = Math.max(...profile);
+  if (max <= 0) return 5;
 
-  return (
-    (x.match(markers) || []).length +
-    Math.min(3, (s.match(/[,;:—–]/g) || []).length * 0.28)
-  );
+  const total = profile.reduce((a, b) => a + b, 0);
+  const meaningful = Math.max(0.8, max * 0.22);
+
+  for (let i = 0; i < profile.length; i++) {
+    const value = profile[i];
+    const cumulative = profile.slice(0, i + 1).reduce((a, b) => a + b, 0);
+
+    if (value >= meaningful || cumulative >= total * 0.38) {
+      return i + 1;
+    }
+  }
+
+  return 5;
 }
 
-function profileDifficulty(p: readonly number[]) {
-  const sum = p.reduce((a, b) => a + b, 0);
-  if (sum <= 0) return 0;
+function syntaxDifficulty(sentences: string[]): 1 | 2 | 3 | 4 | 5 {
+  if (!sentences.length) return 1;
 
-  const smoothed = p.map(v => v + 0.35);
-  const denominator = smoothed.reduce((a, b) => a + b, 0);
-  const weighted =
-    smoothed.reduce((a, v, i) => a + v * (i + 1), 0) / denominator;
+  let totalWords = 0;
+  let totalComplexity = 0;
 
-  const early = (p[0] + p[1]) / (sum + 1e-9);
-  const late = (p[3] + p[4]) / (sum + 1e-9);
+  const subordinate =
+    /\b(although|though|whereas|while|unless|despite|whilst|whenever|wherever|however|which|whose|whom|whether|because|since|after|before|until|once|if|when)\b/gi;
 
-  return Math.max(1, Math.min(5, weighted + late * 0.22 - early * 0.12));
+  for (const sentence of sentences) {
+    const words = sentence.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || [];
+    totalWords += words.length;
+
+    const clauses = (sentence.match(subordinate) || []).length;
+    const punctuation = (sentence.match(/[,;:—–]/g) || []).length;
+
+    totalComplexity += clauses + Math.min(3, punctuation * 0.28);
+  }
+
+  const avgWords = totalWords / sentences.length;
+  const avgComplexity = totalComplexity / sentences.length;
+
+  const raw =
+    (avgWords - 8) * 0.11 +
+    avgComplexity * 0.9;
+
+  if (raw < 1.4) return 1;
+  if (raw < 2.2) return 2;
+  if (raw < 3.1) return 3;
+  if (raw < 4.2) return 4;
+  return 5;
 }
 
-function readingBand(score: number): {
-  band: string;
-  start: CefrLevel;
-  comfortable: CefrLevel;
-} {
-  // This is a practical reading-entry estimate, not a claim that
-  // every word in the original novel belongs to this CEFR level.
-  if (score < 51.8) return { band: 'A2–B1', start: 'A2', comfortable: 'B1' };
-  if (score < 53.0) return { band: 'B1–B2', start: 'B1', comfortable: 'B2' };
-  if (score < 54.5) return { band: 'B2–C1', start: 'B2', comfortable: 'C1' };
-  return { band: 'C1–C2', start: 'C1', comfortable: 'C2' };
+/**
+ * We deliberately cap the influence of repeated words.
+ * A word appearing 300 times should matter more than a hapax,
+ * but not 300 times more. This keeps the metric closer to
+ * "vocabulary needed for the book" instead of plain token frequency.
+ */
+function lemmaWeight(count: number): number {
+  return Math.min(4, Math.sqrt(count));
 }
 
-export function analyzeBookLevel(chapters: BookChapter[]): BookLevelAnalysis {
+function chooseLevel(
+  a1: number,
+  a2: number,
+  b1: number,
+  b2: number,
+  c1: number
+): CefrLevel {
+  // Experimental thresholds. We will calibrate these on the user's books.
+  if (a1 >= 94) return 'A1';
+  if (a2 >= 96) return 'A2';
+  if (b1 >= 97.2) return 'B1';
+  if (b2 >= 98.2) return 'B2';
+  if (c1 >= 99.0) return 'C1';
+  return 'C2';
+}
+
+export function analyzeBookLevel(
+  chapters: BookChapter[]
+): BookLevelAnalysis {
   const text = sampleBook(chapters);
-  const tokens = text.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || [];
-  const words = tokens.map(clean).filter(Boolean);
+
+  const rawWords =
+    text.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || [];
+
+  const words = rawWords.map(cleanWord).filter(Boolean);
 
   if (words.length < 120) {
     return {
       level: 'A2',
-      readingBand: 'A2–B1',
-      comfortableLevel: 'B1',
-      score: 20,
+      score: 0,
+      coverageA1: 0,
+      coverageA2: 0,
+      coverageB1: 0,
+      coverageB2: 0,
+      coverageC1: 0,
+      unknownRatio: 0,
+      readingDifficulty: 1,
       averageSentenceLength: 0,
       averageWordLength: 0,
       longWordRatio: 0,
@@ -146,84 +260,126 @@ export function analyzeBookLevel(chapters: BookChapter[]): BookLevelAnalysis {
   }
 
   const sentences = splitSentences(text);
-  const sentenceLengths = sentences
-    .map(s => (s.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || []).length)
-    .filter(n => n > 0 && n < 120);
-
-  const avgSentence =
-    sentenceLengths.reduce((a, b) => a + b, 0) / Math.max(1, sentenceLengths.length);
-
-  const avgWord = words.reduce((a, w) => a + w.length, 0) / words.length;
-  const longRatio = words.filter(w => w.length >= 9).length / words.length;
-
   const lemmas = words.map(lemma);
-  const content = lemmas.filter(w => w.length >= 4);
 
-  let knownDifficulty = 0;
-  let known = 0;
-  let advancedKnown = 0;
-
-  for (const w of content) {
-    const profile = getEfllexProfile(w);
-    if (!profile) continue;
-
-    const difficulty = profileDifficulty(profile);
-    knownDifficulty += difficulty;
-    known += 1;
-
-    if (difficulty >= 3.65) advancedKnown += 1;
+  const counts = new Map<string, number>();
+  for (const item of lemmas) {
+    if (item.length < 2) continue;
+    counts.set(item, (counts.get(item) || 0) + 1);
   }
 
-  const unknown = Math.max(0, content.length - known);
-  const unknownRatio = unknown / Math.max(1, content.length);
-  const avgLex = knownDifficulty / Math.max(1, known);
-  const advancedRatio = advancedKnown / Math.max(1, known);
+  const tierWeights = [0, 0, 0, 0, 0];
+  let knownWeight = 0;
+  let unknownWeight = 0;
+  let advancedWeight = 0;
 
-  const diversityWindows: number[] = [];
+  for (const [item, count] of counts) {
+    const weight = lemmaWeight(count);
+    const profile = getEfllexProfile(item);
+
+    if (!profile) {
+      unknownWeight += weight;
+      continue;
+    }
+
+    const tier = tierFromProfile(profile);
+    tierWeights[tier - 1] += weight;
+    knownWeight += weight;
+
+    if (tier >= 4) advancedWeight += weight;
+  }
+
+  const cumulative = [];
+  let running = 0;
+
+  for (let i = 0; i < 5; i++) {
+    running += tierWeights[i];
+    cumulative.push(
+      knownWeight > 0 ? (running / knownWeight) * 100 : 0
+    );
+  }
+
+  const coverageA1 = cumulative[0];
+  const coverageA2 = cumulative[1];
+  const coverageB1 = cumulative[2];
+  const coverageB2 = cumulative[3];
+  const coverageC1 = cumulative[4];
+
+  const totalVocabularyWeight = knownWeight + unknownWeight;
+  const unknownRatio =
+    totalVocabularyWeight > 0
+      ? (unknownWeight / totalVocabularyWeight) * 100
+      : 0;
+
+  const level = chooseLevel(
+    coverageA1,
+    coverageA2,
+    coverageB1,
+    coverageB2,
+    coverageC1
+  );
+
+  const sentenceLengths = sentences
+    .map(sentence =>
+      (sentence.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || []).length
+    )
+    .filter(length => length > 0 && length < 120);
+
+  const averageSentenceLength =
+    sentenceLengths.reduce((a, b) => a + b, 0) /
+    Math.max(1, sentenceLengths.length);
+
+  const averageWordLength =
+    words.reduce((sum, word) => sum + word.length, 0) / words.length;
+
+  const longWordRatio =
+    words.filter(word => word.length >= 9).length / words.length;
+
+  const windowDiversity: number[] = [];
   for (let i = 0; i < lemmas.length; i += 500) {
     const window = lemmas.slice(i, i + 500);
     if (window.length < 150) break;
-    diversityWindows.push(new Set(window).size / window.length);
+    windowDiversity.push(new Set(window).size / window.length);
   }
 
-  const diversity =
-    diversityWindows.reduce((a, b) => a + b, 0) / Math.max(1, diversityWindows.length);
+  const lexicalDiversity =
+    windowDiversity.reduce((a, b) => a + b, 0) /
+    Math.max(1, windowDiversity.length);
 
-  const syntax =
-    sentences.map(syntaxComplexity).reduce((a, b) => a + b, 0) /
-    Math.max(1, sentences.length);
+  const advancedWordRatio =
+    knownWeight > 0 ? advancedWeight / knownWeight : 0;
 
-  const lexicalScore = Math.max(0, (avgLex - 1.55) * 18);
-  const advancedScore = Math.min(10, advancedRatio * 30);
-  const sentenceScore = Math.max(0, Math.min(10, (avgSentence - 8) * 0.72));
-  const syntaxScore = Math.min(8, syntax * 3.7);
-  const diversityScore = Math.max(0, Math.min(8, (diversity - 0.43) * 32));
-  const rarityScore = Math.min(5, unknownRatio * 12);
+  // Kept as a simple 0–100 diagnostic number for old UI compatibility.
+  // The CEFR level itself is NOT selected from this score.
+  const score =
+    Math.round(
+      (
+        coverageB1 * 0.20 +
+        coverageB2 * 0.25 +
+        coverageC1 * 0.25 +
+        Math.min(15, unknownRatio) +
+        syntaxDifficulty(sentences) * 3
+      ) * 10
+    ) / 10;
 
-  let score =
-    lexicalScore +
-    advancedScore +
-    sentenceScore +
-    syntaxScore +
-    diversityScore +
-    rarityScore;
-
-  if (avgSentence < 11.5 && avgLex < 3.15) score -= 2;
-  if (avgSentence >= 14 && diversity >= 0.55 && avgLex >= 3.0) score += 3;
-
-  const rounded = Math.round(score * 10) / 10;
-  const band = readingBand(rounded);
+  const round1 = (value: number) => Math.round(value * 10) / 10;
+  const round3 = (value: number) => Math.round(value * 1000) / 1000;
 
   return {
-    level: band.start,
-    readingBand: band.band,
-    comfortableLevel: band.comfortable,
-    score: rounded,
-    averageSentenceLength: Math.round(avgSentence * 10) / 10,
-    averageWordLength: Math.round(avgWord * 100) / 100,
-    longWordRatio: Math.round(longRatio * 1000) / 1000,
-    advancedWordRatio: Math.round(advancedRatio * 1000) / 1000,
-    lexicalDiversity: Math.round(diversity * 1000) / 1000,
+    level,
+    score,
+    coverageA1: round1(coverageA1),
+    coverageA2: round1(coverageA2),
+    coverageB1: round1(coverageB1),
+    coverageB2: round1(coverageB2),
+    coverageC1: round1(coverageC1),
+    unknownRatio: round1(unknownRatio),
+    readingDifficulty: syntaxDifficulty(sentences),
+    averageSentenceLength: round1(averageSentenceLength),
+    averageWordLength: Math.round(averageWordLength * 100) / 100,
+    longWordRatio: round3(longWordRatio),
+    advancedWordRatio: round3(advancedWordRatio),
+    lexicalDiversity: round3(lexicalDiversity),
     sampledWords: words.length,
   };
 }
