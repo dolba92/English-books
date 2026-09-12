@@ -10,80 +10,139 @@ import backgroundUrl from '@/assets/english-books-background.png';
 
 type Level = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
 
-function countSyllables(word: string): number {
-  const cleaned = word
-    .toLowerCase()
-    .replace(/[^a-z]/g, '')
-    .replace(/e$/, '')
-    .replace(/(?:[^laeiouy]es|ed)$/, '');
+const CEFR_COMMON_WORDS = new Set(
+  `
+  the be to of and a in that have i it for not on with he as you do at this but
+  his by from they we say her she or an will my one all would there their what so
+  up out if about who get which go me when make can like time no just him know take
+  people into year your good some could them see other than then now look only come
+  its over think also back after use two how our work first well way even new want
+  because these give day most us is are was were been being am has had having does
+  did doing went gone going made making came coming saw seen got getting took taken
+  taking said saying thought thinking knew known knowing gave given giving found
+  finding felt feeling left leaving put keep kept keeping let begin began begun
+  seem help talk turn start show hear heard play run move live believe bring happen
+  write sit stand lose pay meet include continue set learn change lead understand
+  watch follow stop create speak read allow add spend grow open walk win offer
+  remember love consider appear buy wait serve die send expect build stay fall cut
+  reach kill remain suggest raise pass sell require report decide pull return explain
+  hope develop carry break receive agree support hit produce eat cover catch draw
+  choose cause point listen realize place close involve increase improve join pick
+  wear drive sleep drink try need feel become leave call ask tell find give
+  man woman child children boy girl person family mother father sister brother friend
+  house home room school book word water food night morning day week world life hand
+  eye face head name thing place door car road town country question problem story
+  money job side kind lot end enough little long great old young big small high low
+  right wrong same different important possible sure happy sorry afraid angry
+  beautiful hard easy early late near far together again always never often sometimes
+  very really too more less many much few another every each both own such still
+  already almost perhaps maybe here there where why how before after during without
+  under above between around through against while until since once
+  `.trim().split(/\s+/)
+);
 
+const CEFR_ADVANCED_HINTS = new Set(
+  `
+  notwithstanding nevertheless consequently furthermore moreover whereas whereby
+  albeit henceforth thereby therein insofar ostensibly presumably subsequently
+  unprecedented inevitable sophisticated substantial considerable significant
+  controversial conventional phenomenon perspective implication circumstance
+  acquisition acknowledge demonstrate establish constitute indicate interpret
+  perceive pursue require sufficient undertake retain emerge encounter
+  `.trim().split(/\s+/)
+);
+
+function countSyllables(word: string): number {
+  let cleaned = word.toLowerCase().replace(/[^a-z]/g, '');
   if (!cleaned) return 1;
+  if (cleaned.length <= 3) return 1;
+
+  cleaned = cleaned
+    .replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '')
+    .replace(/^y/, '');
 
   const groups = cleaned.match(/[aeiouy]+/g);
   return Math.max(1, groups?.length || 1);
 }
 
 function estimateBookLevel(chapters: Array<{ paragraphs?: string[] }>): Level {
-  const MAX_WORDS = 20000;
-  const paragraphs: string[] = [];
+  // CEFR cannot be measured perfectly from prose alone. This is a deliberately
+  // conservative heuristic: readability + vocabulary difficulty + sentence complexity.
+  // Most native novels should land around B1-C1, not automatically C2.
+  const MAX_WORDS = 30000;
+  const chunks: string[] = [];
   let collectedWords = 0;
 
   outer: for (const chapter of chapters || []) {
     for (const paragraph of chapter?.paragraphs || []) {
       if (!paragraph) continue;
-      paragraphs.push(paragraph);
+      chunks.push(paragraph);
       collectedWords += (paragraph.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || []).length;
       if (collectedWords >= MAX_WORDS) break outer;
     }
   }
 
-  const text = paragraphs.join(' ');
-  const words = text.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || [];
+  const text = chunks.join(' ');
+  const rawWords = text.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || [];
+  if (rawWords.length < 120) return 'B1';
 
-  if (words.length < 120) return 'B1';
+  const words = rawWords
+    .map((word) => word.toLowerCase().replace(/[’']/g, ''))
+    .filter(Boolean);
 
-  const sentenceCount = Math.max(
-    1,
-    (text.match(/[.!?]+(?:["'’”)]|$)/g) || text.match(/[.!?]+/g) || []).length
-  );
+  const sentenceMatches =
+    text.match(/[^.!?]+[.!?]+(?:["'’”)]|$)?/g) ||
+    text.split(/[.!?]+/).filter((part) => part.trim().length > 0);
+  const sentenceCount = Math.max(1, sentenceMatches.length);
 
   let syllables = 0;
   let longWords = 0;
+  let veryLongWords = 0;
+  let uncommonWords = 0;
+  let advancedHints = 0;
 
-  for (const rawWord of words) {
-    const word = rawWord.replace(/[’']/g, '').toLowerCase();
+  for (const word of words) {
     syllables += countSyllables(word);
     if (word.length >= 8) longWords += 1;
+    if (word.length >= 11) veryLongWords += 1;
+
+    // Ignore proper-name-like noise indirectly by only treating alphabetic,
+    // reasonably long vocabulary as evidence of lexical difficulty.
+    if (word.length >= 7 && !CEFR_COMMON_WORDS.has(word)) uncommonWords += 1;
+    if (CEFR_ADVANCED_HINTS.has(word)) advancedHints += 1;
   }
 
   const avgSentenceLength = words.length / sentenceCount;
   const avgSyllablesPerWord = syllables / words.length;
   const longWordRatio = longWords / words.length;
+  const veryLongWordRatio = veryLongWords / words.length;
+  const uncommonRatio = uncommonWords / words.length;
+  const advancedRatio = advancedHints / words.length;
 
   const flesch =
     206.835 -
     1.015 * avgSentenceLength -
     84.6 * avgSyllablesPerWord;
 
-  let index = 2;
+  // Convert several independent signals to one 0..100 difficulty score.
+  // Flesch alone is too harsh for fiction and was the main reason books became C2.
+  let score = 0;
 
-  if (flesch >= 92) index = 0;
-  else if (flesch >= 82) index = 1;
-  else if (flesch >= 68) index = 2;
-  else if (flesch >= 52) index = 3;
-  else if (flesch >= 38) index = 4;
-  else index = 5;
+  if (flesch < 90) score += Math.min(28, (90 - flesch) * 0.42);
+  score += Math.min(24, Math.max(0, avgSentenceLength - 8) * 1.15);
+  score += Math.min(18, Math.max(0, avgSyllablesPerWord - 1.25) * 45);
+  score += Math.min(12, longWordRatio * 55);
+  score += Math.min(8, veryLongWordRatio * 80);
+  score += Math.min(8, uncommonRatio * 22);
+  score += Math.min(6, advancedRatio * 700);
 
-  if (avgSentenceLength >= 21 || longWordRatio >= 0.19) {
-    index = Math.min(5, index + 1);
-  }
-
-  if (avgSentenceLength <= 9 && longWordRatio <= 0.08) {
-    index = Math.max(0, index - 1);
-  }
-
-  const levels: Level[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-  return levels[index];
+  // CEFR bands are intentionally wide at the top. C2 should be exceptional.
+  if (score < 22) return 'A1';
+  if (score < 31) return 'A2';
+  if (score < 43) return 'B1';
+  if (score < 56) return 'B2';
+  if (score < 72) return 'C1';
+  return 'C2';
 }
 
 export function LibraryPage() {
@@ -105,12 +164,19 @@ export function LibraryPage() {
           const actualPageCount = paginateBook(book.content, 6).totalPages;
           const estimatedLevel = estimateBookLevel(book.content);
 
+          const updatedBook = {
+            ...book,
+            totalPages: actualPageCount,
+            level: estimatedLevel,
+          };
+
+          // Keep recalculated CEFR for already imported books too.
+          if (book.level !== estimatedLevel || book.totalPages !== actualPageCount) {
+            await saveBook(updatedBook);
+          }
+
           return {
-            book: {
-              ...book,
-              totalPages: actualPageCount,
-              level: estimatedLevel,
-            },
+            book: updatedBook,
             progress: prog?.percentComplete || 0,
           };
         })
