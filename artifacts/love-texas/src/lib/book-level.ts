@@ -213,19 +213,92 @@ function lemmaWeight(count: number): number {
   return Math.min(4, Math.sqrt(count));
 }
 
-function chooseLevel(
-  a1: number,
-  a2: number,
-  b1: number,
-  b2: number,
-  c1: number
-): CefrLevel {
-  // Experimental thresholds. We will calibrate these on the user's books.
-  if (a1 >= 94) return 'A1';
-  if (a2 >= 96) return 'A2';
-  if (b1 >= 97.2) return 'B1';
-  if (b2 >= 98.2) return 'B2';
-  if (c1 >= 99.0) return 'C1';
+function chooseLevel(params: {
+  a1: number;
+  a2: number;
+  b1: number;
+  b2: number;
+  unknownRatio: number;
+  averageSentenceLength: number;
+  longWordRatio: number;
+}): CefrLevel {
+  const {
+    a1,
+    a2,
+    b1,
+    b2,
+    unknownRatio,
+    averageSentenceLength,
+    longWordRatio,
+  } = params;
+
+  const longPct = longWordRatio * 100;
+
+  // Very easy books: overwhelmingly basic vocabulary + short syntax.
+  if (
+    a1 >= 62 &&
+    a2 >= 80 &&
+    b1 >= 91 &&
+    unknownRatio <= 12 &&
+    averageSentenceLength <= 9.5
+  ) {
+    return 'A1';
+  }
+
+  if (
+    a2 >= 70 &&
+    b1 >= 85 &&
+    b2 >= 95 &&
+    unknownRatio <= 17 &&
+    averageSentenceLength <= 11.0 &&
+    longPct <= 3.5
+  ) {
+    return 'A2';
+  }
+
+  /*
+   * B1 is the normal "accessible modern fiction" band.
+   *
+   * Important calibration from our real books:
+   * - Percy Jackson should remain easier than Harry Potter.
+   * - fantasy/proper-name noise must not automatically become C1.
+   * - sentence length and long-word density are used as tie-breakers.
+   */
+  const looksB1 =
+    b1 >= 76 &&
+    b2 >= 90 &&
+    unknownRatio < 22 &&
+    longPct < 5.2 &&
+    averageSentenceLength < 13.5;
+
+  if (looksB1) {
+    return 'B1';
+  }
+
+  // B2: richer vocabulary, more unknown literary/fantasy vocabulary,
+  // or noticeably denser sentence/word structure.
+  const looksB2 =
+    b1 >= 70 &&
+    b2 >= 86 &&
+    unknownRatio < 29 &&
+    averageSentenceLength < 17.5 &&
+    longPct < 8.5;
+
+  if (looksB2) {
+    return 'B2';
+  }
+
+  // C1 requires several genuinely difficult signals at once.
+  const looksC1 =
+    b1 >= 60 &&
+    b2 >= 78 &&
+    unknownRatio < 38 &&
+    averageSentenceLength < 23;
+
+  if (looksC1) {
+    return 'C1';
+  }
+
   return 'C2';
 }
 
@@ -311,20 +384,6 @@ export function analyzeBookLevel(
       ? (unknownWeight / totalVocabularyWeight) * 100
       : 0;
 
-  const level = chooseLevel(
-    coverageA1,
-    coverageA2,
-    coverageB1,
-    coverageB2,
-    coverageC1
-  );
-
-  const sentenceLengths = sentences
-    .map(sentence =>
-      (sentence.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || []).length
-    )
-    .filter(length => length > 0 && length < 120);
-
   const averageSentenceLength =
     sentenceLengths.reduce((a, b) => a + b, 0) /
     Math.max(1, sentenceLengths.length);
@@ -334,6 +393,22 @@ export function analyzeBookLevel(
 
   const longWordRatio =
     words.filter(word => word.length >= 9).length / words.length;
+
+  const level = chooseLevel({
+    a1: coverageA1,
+    a2: coverageA2,
+    b1: coverageB1,
+    b2: coverageB2,
+    unknownRatio,
+    averageSentenceLength,
+    longWordRatio,
+  });
+
+  const sentenceLengths = sentences
+    .map(sentence =>
+      (sentence.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || []).length
+    )
+    .filter(length => length > 0 && length < 120);
 
   const windowDiversity: number[] = [];
   for (let i = 0; i < lemmas.length; i += 500) {
