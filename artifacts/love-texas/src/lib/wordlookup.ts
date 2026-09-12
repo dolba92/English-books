@@ -296,13 +296,20 @@ function deriveConfidentLemma(
     'something', 'nothing', 'anything', 'everything',
     'morning', 'evening', 'during', 'ceiling',
     'darling', 'sterling', 'spring', 'king', 'thing',
+    'mysterious',
   ]);
   if (nonInflecting.has(word)) return undefined;
+
+  // Hyphenated compounds/adjectives are too ambiguous for mechanical
+  // suffix stripping: funny-looking must not become "funny-look".
+  if (word.includes('-')) return undefined;
 
   const exact: Record<string, string> = {
     escaping: 'escape',
     hurtling: 'hurtle',
     sitting: 'sit',
+    sleeping: 'sleep',
+    going: 'go',
     shining: 'shine',
     shines: 'shine',
     hurried: 'hurry',
