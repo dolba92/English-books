@@ -294,6 +294,15 @@ export function LibraryPage() {
                 />
 
                 <ReadingDifficulty value={item.analysis.readingDifficulty} />
+                <div className="mt-1 text-[9px] leading-tight text-[#6f4a4a]/80 text-center whitespace-nowrap">
+                  P{item.analysis.readingDiagnostics.points}
+                  {' · '}avg {item.analysis.readingDiagnostics.average.toFixed(1)}
+                  {' · '}75 {item.analysis.readingDiagnostics.p75}
+                  {' · '}90 {item.analysis.readingDiagnostics.p90}
+                  {' · '}20+ {(item.analysis.readingDiagnostics.long20Ratio * 100).toFixed(0)}%
+                  {' · '}30+ {(item.analysis.readingDiagnostics.long30Ratio * 100).toFixed(0)}%
+                  {' · '}cx {(item.analysis.readingDiagnostics.complexRatio * 100).toFixed(0)}%
+                </div>
               </motion.div>
             ))}
           </div>
