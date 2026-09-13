@@ -25,6 +25,9 @@ export interface BookLevelAnalysis {
     long20Ratio: number;
     long30Ratio: number;
     complexRatio: number;
+    longWordRatio: number;
+    lexicalDiversity: number;
+    lexicalBonus: number;
   };
 
   // Existing diagnostics kept so LibraryPage does not break.
@@ -184,6 +187,8 @@ function syntaxDifficulty(
   vocabulary: {
     level: CefrLevel;
     unknownRatio: number;
+    longWordRatio: number;
+    lexicalDiversity: number;
   }
 ): 1 | 2 | 3 | 4 | 5 {
   const stats = sentences
@@ -267,6 +272,18 @@ function syntaxDifficulty(
   if (vocabulary.unknownRatio >= 22) points += 1;
   if (vocabulary.unknownRatio >= 30) points += 1;
 
+  // Lexical load matters for reading effort even when sentences are short.
+  // Dragons is the kind of prose this catches: many compact sentences,
+  // but a noticeably denser layer of long/literary vocabulary.
+  let lexicalBonus = 0;
+  if (vocabulary.longWordRatio >= 0.055) lexicalBonus += 2;
+  else if (vocabulary.longWordRatio >= 0.045) lexicalBonus += 1;
+
+  if (vocabulary.lexicalDiversity >= 0.575) lexicalBonus += 1;
+
+  lexicalBonus = Math.min(2, lexicalBonus);
+  points += lexicalBonus;
+
   // 1/5 stays reserved for genuinely elementary prose.
   if (
     points <= 1 &&
@@ -305,7 +322,12 @@ function syntaxDifficulty(
 
 function getReadingDiagnostics(
   sentences: string[],
-  vocabulary: { level: CefrLevel; unknownRatio: number }
+  vocabulary: {
+    level: CefrLevel;
+    unknownRatio: number;
+    longWordRatio: number;
+    lexicalDiversity: number;
+  }
 ) {
   const stats = sentences
     .map(sentence => {
@@ -323,7 +345,13 @@ function getReadingDiagnostics(
     .filter(item => item.length > 0 && item.length < 120);
 
   if (!stats.length) {
-    return { points: 0, average: 0, p75: 0, p90: 0, long20Ratio: 0, long30Ratio: 0, complexRatio: 0 };
+    return {
+      points: 0, average: 0, p75: 0, p90: 0,
+      long20Ratio: 0, long30Ratio: 0, complexRatio: 0,
+      longWordRatio: vocabulary.longWordRatio,
+      lexicalDiversity: vocabulary.lexicalDiversity,
+      lexicalBonus: 0,
+    };
   }
 
   const lengths = stats.map(item => item.length).sort((a, b) => a - b);
@@ -361,7 +389,25 @@ function getReadingDiagnostics(
   if (vocabulary.unknownRatio >= 22) points += 1;
   if (vocabulary.unknownRatio >= 30) points += 1;
 
-  return { points, average, p75, p90, long20Ratio, long30Ratio, complexRatio };
+  let lexicalBonus = 0;
+  if (vocabulary.longWordRatio >= 0.055) lexicalBonus += 2;
+  else if (vocabulary.longWordRatio >= 0.045) lexicalBonus += 1;
+  if (vocabulary.lexicalDiversity >= 0.575) lexicalBonus += 1;
+  lexicalBonus = Math.min(2, lexicalBonus);
+  points += lexicalBonus;
+
+  return {
+    points,
+    average,
+    p75,
+    p90,
+    long20Ratio,
+    long30Ratio,
+    complexRatio,
+    longWordRatio: vocabulary.longWordRatio,
+    lexicalDiversity: vocabulary.lexicalDiversity,
+    lexicalBonus,
+  };
 }
 
 /**
@@ -478,6 +524,7 @@ export function analyzeBookLevel(
       readingDiagnostics: {
         points: 0, average: 0, p75: 0, p90: 0,
         long20Ratio: 0, long30Ratio: 0, complexRatio: 0,
+        longWordRatio: 0, lexicalDiversity: 0, lexicalBonus: 0,
       },
       averageSentenceLength: 0,
       averageWordLength: 0,
@@ -588,7 +635,7 @@ export function analyzeBookLevel(
         coverageB2 * 0.25 +
         coverageC1 * 0.25 +
         Math.min(15, unknownRatio) +
-        syntaxDifficulty(sentences, { level, unknownRatio }) * 3
+        syntaxDifficulty(sentences, { level, unknownRatio, longWordRatio, lexicalDiversity }) * 3
       ) * 10
     ) / 10;
 
@@ -604,8 +651,8 @@ export function analyzeBookLevel(
     coverageB2: round1(coverageB2),
     coverageC1: round1(coverageC1),
     unknownRatio: round1(unknownRatio),
-    readingDifficulty: syntaxDifficulty(sentences, { level, unknownRatio }),
-    readingDiagnostics: getReadingDiagnostics(sentences, { level, unknownRatio }),
+    readingDifficulty: syntaxDifficulty(sentences, { level, unknownRatio, longWordRatio, lexicalDiversity }),
+    readingDiagnostics: getReadingDiagnostics(sentences, { level, unknownRatio, longWordRatio, lexicalDiversity }),
     averageSentenceLength: round1(averageSentenceLength),
     averageWordLength: Math.round(averageWordLength * 100) / 100,
     longWordRatio: round3(longWordRatio),
