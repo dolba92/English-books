@@ -194,14 +194,11 @@ function syntaxDifficulty(
 ): 1 | 2 | 3 | 4 | 5 {
   const stats = sentences
     .map(sentence => {
-      const words =
-        sentence.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || [];
-
+      const words = sentence.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || [];
       const clauseSignals =
         sentence.match(
           /\b(?:although|though|because|since|unless|whereas|while|when|which|who|whose|whom|that|if|as)\b|[;:—–]/gi
         ) || [];
-
       return {
         length: words.length,
         clauseSignals: clauseSignals.length,
@@ -216,140 +213,49 @@ function syntaxDifficulty(
   const percentile = (p: number) =>
     lengths[Math.min(lengths.length - 1, Math.floor((lengths.length - 1) * p))];
 
-  const average =
-    lengths.reduce((sum, length) => sum + length, 0) / lengths.length;
-
-  // Ignore tiny dramatic fragments for this secondary average. They affect
-  // rhythm, but should not make otherwise demanding prose look elementary.
-  const substantialLengths = stats
-    .map(item => item.length)
-    .filter(length => length >= 7);
-  const substantialAverage = substantialLengths.length
-    ? substantialLengths.reduce((sum, length) => sum + length, 0) / substantialLengths.length
-    : average;
+  const substantial = stats.filter(item => item.length >= 7);
+  const substantialAverage = substantial.length
+    ? substantial.reduce((sum, item) => sum + item.length, 0) / substantial.length
+    : lengths.reduce((sum, n) => sum + n, 0) / lengths.length;
 
   const p75 = percentile(0.75);
   const p90 = percentile(0.90);
-
-  const long20Ratio =
-    stats.filter(item => item.length >= 20).length / stats.length;
-
-  const long30Ratio =
-    stats.filter(item => item.length >= 30).length / stats.length;
-
+  const long20Ratio = stats.filter(item => item.length >= 20).length / stats.length;
+  const long30Ratio = stats.filter(item => item.length >= 30).length / stats.length;
   const complexRatio =
-    stats.filter(
-      item =>
-        item.length >= 18 &&
-        (item.clauseSignals >= 2 || item.commas >= 2)
-    ).length / stats.length;
+    stats.filter(item => item.length >= 18 && (item.clauseSignals >= 2 || item.commas >= 2)).length /
+    stats.length;
 
-  /*
-   * Overall reading difficulty:
-   * syntax is still the main signal, but vocabulary adds a small amount.
-   * CEFR itself remains calculated separately and is NOT changed here.
-   */
-  let points = 0;
+  // Syntax is scored once from a compact set of non-duplicative signals.
+  let syntax: 1 | 2 | 3 | 4 | 5 = 1;
+  if (substantialAverage >= 12.5 || p90 >= 20 || long20Ratio >= 0.08) syntax = 2;
+  if (substantialAverage >= 15.5 || p90 >= 27 || long20Ratio >= 0.20 || complexRatio >= 0.10) syntax = 3;
+  if ((p90 >= 36 && long30Ratio >= 0.10) || substantialAverage >= 20 || complexRatio >= 0.20) syntax = 4;
+  if ((p90 >= 48 && long30Ratio >= 0.22) || substantialAverage >= 25 || complexRatio >= 0.32) syntax = 5;
 
-  // Syntax / sentence distribution.
-  if (average >= 9.5) points += 1;
-  if (average >= 12) points += 1;
-  if (average >= 15) points += 1;
-  if (average >= 20) points += 1;
+  // Vocabulary is a separate dimension.
+  let vocab: 1 | 2 | 3 | 4 | 5 = 1;
+  if (vocabulary.level === 'A2') vocab = 2;
+  else if (vocabulary.level === 'B1') vocab = 2;
+  else if (vocabulary.level === 'B2') vocab = 3;
+  else if (vocabulary.level === 'C1') vocab = 4;
+  else if (vocabulary.level === 'C2') vocab = 5;
 
-  // Full-sentence load: short stylistic fragments get much less influence.
-  if (substantialAverage >= 15.5) points += 1;
-  if (substantialAverage >= 19.5) points += 1;
-
-  if (p75 >= 16) points += 1;
-  if (p75 >= 21) points += 1;
-  if (p75 >= 28) points += 1;
-
-  if (p90 >= 24) points += 1;
-  if (p90 >= 34) points += 1;
-  if (p90 >= 45) points += 1;
-
-  if (long20Ratio >= 0.18) points += 1;
-  if (long20Ratio >= 0.35) points += 1;
-  if (long30Ratio >= 0.10) points += 1;
-
-  if (complexRatio >= 0.08) points += 1;
-  if (complexRatio >= 0.18) points += 1;
-
-  // Small vocabulary contribution.
-  // This is intentionally weaker than syntax, but prevents lexically dense
-  // B2/C1 books from looking "simple" just because they use short fragments.
-  if (vocabulary.level === 'B2') points += 1;
-  if (vocabulary.level === 'C1') points += 2;
-  if (vocabulary.level === 'C2') points += 3;
-
-  if (vocabulary.unknownRatio >= 22) points += 1;
-  if (vocabulary.unknownRatio >= 30) points += 1;
-
-  // Lexical load matters for reading effort even when sentences are short.
-  // Dragons is the kind of prose this catches: many compact sentences,
-  // but a noticeably denser layer of long/literary vocabulary.
-  let lexicalBonus = 0;
-
-  // A compact sentence can still be hard when vocabulary is dense.
-  // Use combinations, not a title-specific exception.
-  if (
-    vocabulary.longWordRatio >= 0.040 &&
-    (
-      vocabulary.lexicalDiversity >= 0.545 ||
-      vocabulary.level === 'B2' ||
-      vocabulary.level === 'C1' ||
-      vocabulary.level === 'C2'
-    )
-  ) {
-    lexicalBonus += 1;
+  if (vocabulary.longWordRatio >= 0.040 && vocabulary.lexicalDiversity >= 0.54) {
+    vocab = Math.min(5, vocab + 1) as 1 | 2 | 3 | 4 | 5;
+  }
+  if (vocabulary.unknownRatio >= 28) {
+    vocab = Math.min(5, vocab + 1) as 1 | 2 | 3 | 4 | 5;
   }
 
-  if (
-    vocabulary.longWordRatio >= 0.055 &&
-    vocabulary.lexicalDiversity >= 0.55
-  ) {
-    lexicalBonus += 1;
-  }
-
-  lexicalBonus = Math.min(2, lexicalBonus);
-  points += lexicalBonus;
-
-  // 1/5 stays reserved for genuinely elementary prose.
-  if (
-    points <= 1 &&
-    average < 10 &&
-    p75 < 15 &&
-    p90 < 22 &&
-    long20Ratio < 0.10 &&
-    complexRatio < 0.05 &&
-    vocabulary.level !== 'B2' &&
-    vocabulary.level !== 'C1' &&
-    vocabulary.level !== 'C2'
-  ) {
-    return 1;
-  }
-
-  /*
-   * Promote a borderline B2+ book to 3/5 only when the syntax itself is
-   * already moderately dense. CEFR remains a separate calculation.
-   */
-  const denseB2Prose =
-    (vocabulary.level === 'B2' ||
-      vocabulary.level === 'C1' ||
-      vocabulary.level === 'C2') &&
-    (
-      (p90 >= 27 && complexRatio >= 0.07) ||
-      (p75 >= 18 && long20Ratio >= 0.22) ||
-      (average >= 11.5 && complexRatio >= 0.10)
-    );
-
-  if (points <= 4 && !denseB2Prose) return 2;
-  if (points <= 8) return 3;
-  if (points <= 11) return 4;
+  // Blend dimensions instead of stacking correlated bonuses.
+  const blended = syntax * 0.55 + vocab * 0.45;
+  if (blended < 1.65) return 1;
+  if (blended < 2.55) return 2;
+  if (blended < 3.45) return 3;
+  if (blended < 4.35) return 4;
   return 5;
 }
-
 
 function getReadingDiagnostics(
   sentences: string[],
@@ -388,13 +294,10 @@ function getReadingDiagnostics(
   const lengths = stats.map(item => item.length).sort((a, b) => a - b);
   const percentile = (p: number) =>
     lengths[Math.min(lengths.length - 1, Math.floor((lengths.length - 1) * p))];
-
-  const average = lengths.reduce((sum, length) => sum + length, 0) / lengths.length;
-  const substantialLengths = stats
-    .map(item => item.length)
-    .filter(length => length >= 7);
-  const substantialAverage = substantialLengths.length
-    ? substantialLengths.reduce((sum, length) => sum + length, 0) / substantialLengths.length
+  const average = lengths.reduce((sum, n) => sum + n, 0) / lengths.length;
+  const substantial = stats.filter(item => item.length >= 7);
+  const substantialAverage = substantial.length
+    ? substantial.reduce((sum, item) => sum + item.length, 0) / substantial.length
     : average;
   const p75 = percentile(0.75);
   const p90 = percentile(0.90);
@@ -404,55 +307,8 @@ function getReadingDiagnostics(
     stats.filter(item => item.length >= 18 && (item.clauseSignals >= 2 || item.commas >= 2)).length /
     stats.length;
 
-  let points = 0;
-  if (average >= 9.5) points += 1;
-  if (average >= 12) points += 1;
-  if (average >= 15) points += 1;
-  if (average >= 20) points += 1;
-  if (substantialAverage >= 15.5) points += 1;
-  if (substantialAverage >= 19.5) points += 1;
-  if (p75 >= 16) points += 1;
-  if (p75 >= 21) points += 1;
-  if (p75 >= 28) points += 1;
-  if (p90 >= 24) points += 1;
-  if (p90 >= 34) points += 1;
-  if (p90 >= 45) points += 1;
-  if (long20Ratio >= 0.18) points += 1;
-  if (long20Ratio >= 0.35) points += 1;
-  if (long30Ratio >= 0.10) points += 1;
-  if (complexRatio >= 0.08) points += 1;
-  if (complexRatio >= 0.18) points += 1;
-  if (vocabulary.level === 'B2') points += 1;
-  if (vocabulary.level === 'C1') points += 2;
-  if (vocabulary.level === 'C2') points += 3;
-  if (vocabulary.unknownRatio >= 22) points += 1;
-  if (vocabulary.unknownRatio >= 30) points += 1;
-
-  let lexicalBonus = 0;
-
-  // A compact sentence can still be hard when vocabulary is dense.
-  // Use combinations, not a title-specific exception.
-  if (
-    vocabulary.longWordRatio >= 0.040 &&
-    (
-      vocabulary.lexicalDiversity >= 0.545 ||
-      vocabulary.level === 'B2' ||
-      vocabulary.level === 'C1' ||
-      vocabulary.level === 'C2'
-    )
-  ) {
-    lexicalBonus += 1;
-  }
-
-  if (
-    vocabulary.longWordRatio >= 0.055 &&
-    vocabulary.lexicalDiversity >= 0.55
-  ) {
-    lexicalBonus += 1;
-  }
-
-  lexicalBonus = Math.min(2, lexicalBonus);
-  points += lexicalBonus;
+  // For the temporary UI, P now shows the final 1–5 result.
+  const points = syntaxDifficulty(sentences, vocabulary);
 
   return {
     points,
@@ -465,7 +321,7 @@ function getReadingDiagnostics(
     complexRatio,
     longWordRatio: vocabulary.longWordRatio,
     lexicalDiversity: vocabulary.lexicalDiversity,
-    lexicalBonus,
+    lexicalBonus: 0,
   };
 }
 
