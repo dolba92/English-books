@@ -197,6 +197,9 @@ function readingDifficultyModel(
     unknownRatio: number;
     longWordRatio: number;
     lexicalDiversity: number;
+    subtlexCoverage: number;
+    rareWordRatio: number;
+    veryRareWordRatio: number;
   }
 ) {
   const stats = sentences
@@ -259,10 +262,10 @@ function readingDifficultyModel(
   }
 
   if (
-    complexRatio >= 0.115 ||
-    (substantialAverage >= 16.5 && complexRatio >= 0.075) ||
-    (p90 >= 30 && complexRatio >= 0.070) ||
-    (long20Ratio >= 0.25 && complexRatio >= 0.070)
+    complexRatio >= 0.15 ||
+    (substantialAverage >= 17.5 && complexRatio >= 0.10) ||
+    (p90 >= 30 && complexRatio >= 0.09) ||
+    (long20Ratio >= 0.24 && complexRatio >= 0.09)
   ) {
     syntax = 3;
   }
@@ -283,6 +286,10 @@ function readingDifficultyModel(
     syntax = 5;
   }
 
+  // Vocabulary difficulty:
+  // CEFR remains the broad baseline; SUBTLEX adjusts it using actual
+  // real-world rarity. EFLLex "unknown" is diagnostic only, because an
+  // absent literary/name/domain word is not automatically difficult.
   let vocab: 1 | 2 | 3 | 4 | 5 = 1;
   if (vocabulary.level === 'A2') vocab = 2;
   else if (vocabulary.level === 'B1') vocab = 2;
@@ -290,22 +297,34 @@ function readingDifficultyModel(
   else if (vocabulary.level === 'C1') vocab = 4;
   else if (vocabulary.level === 'C2') vocab = 5;
 
-  if (vocabulary.longWordRatio >= 0.040 && vocabulary.lexicalDiversity >= 0.54) {
-    vocab = Math.min(5, vocab + 1) as 1 | 2 | 3 | 4 | 5;
-  }
+  const hasSubtlex = vocabulary.subtlexCoverage >= 0.80;
 
-  if (
-    (vocabulary.level === 'A2' || vocabulary.level === 'B1') &&
-    (
-      (vocabulary.longWordRatio >= 0.032 && vocabulary.unknownRatio >= 16) ||
-      (vocabulary.longWordRatio >= 0.030 && vocabulary.lexicalDiversity >= 0.55)
-    )
-  ) {
-    vocab = Math.min(5, vocab + 1) as 1 | 2 | 3 | 4 | 5;
-  }
+  if (hasSubtlex) {
+    // Clearly richer lexical texture: promote one band.
+    if (
+      vocabulary.rareWordRatio >= 0.030 ||
+      vocabulary.veryRareWordRatio >= 0.010
+    ) {
+      vocab = Math.min(5, vocab + 1) as 1 | 2 | 3 | 4 | 5;
+    }
 
-  if (vocabulary.unknownRatio >= 28) {
-    vocab = Math.min(5, vocab + 1) as 1 | 2 | 3 | 4 | 5;
+    // Very common contemporary vocabulary: don't let EFLLex gaps alone
+    // inflate an A2/B1 text to V3.
+    if (
+      (vocabulary.level === 'A2' || vocabulary.level === 'B1') &&
+      vocabulary.rareWordRatio < 0.025 &&
+      vocabulary.veryRareWordRatio < 0.008
+    ) {
+      vocab = 2;
+    }
+  } else {
+    // Offline/fallback behaviour: preserve the conservative v19 heuristic.
+    if (
+      vocabulary.longWordRatio >= 0.040 &&
+      vocabulary.lexicalDiversity >= 0.54
+    ) {
+      vocab = Math.min(5, vocab + 1) as 1 | 2 | 3 | 4 | 5;
+    }
   }
 
   const blended = syntax * 0.45 + vocab * 0.55;
@@ -339,6 +358,9 @@ function syntaxDifficulty(
     unknownRatio: number;
     longWordRatio: number;
     lexicalDiversity: number;
+    subtlexCoverage: number;
+    rareWordRatio: number;
+    veryRareWordRatio: number;
   }
 ): 1 | 2 | 3 | 4 | 5 {
   return readingDifficultyModel(sentences, vocabulary).difficulty;
@@ -620,7 +642,7 @@ export function analyzeBookLevel(
         coverageB2 * 0.25 +
         coverageC1 * 0.25 +
         Math.min(15, unknownRatio) +
-        syntaxDifficulty(sentences, { level, unknownRatio, longWordRatio, lexicalDiversity }) * 3
+        syntaxDifficulty(sentences, { level, unknownRatio, longWordRatio, lexicalDiversity, subtlexCoverage, rareWordRatio, veryRareWordRatio }) * 3
       ) * 10
     ) / 10;
 
@@ -636,9 +658,9 @@ export function analyzeBookLevel(
     coverageB2: round1(coverageB2),
     coverageC1: round1(coverageC1),
     unknownRatio: round1(unknownRatio),
-    readingDifficulty: syntaxDifficulty(sentences, { level, unknownRatio, longWordRatio, lexicalDiversity }),
+    readingDifficulty: syntaxDifficulty(sentences, { level, unknownRatio, longWordRatio, lexicalDiversity, subtlexCoverage, rareWordRatio, veryRareWordRatio }),
     readingDiagnostics: {
-      ...getReadingDiagnostics(sentences, { level, unknownRatio, longWordRatio, lexicalDiversity }),
+      ...getReadingDiagnostics(sentences, { level, unknownRatio, longWordRatio, lexicalDiversity, subtlexCoverage, rareWordRatio, veryRareWordRatio }),
       subtlexCoverage: round3(subtlexCoverage),
       rareWordRatio: round3(rareWordRatio),
       veryRareWordRatio: round3(veryRareWordRatio),
