@@ -5,6 +5,7 @@ import { parseEpub } from '@/lib/epub-parser';
 import { parseFb2 } from '@/lib/fb2-parser';
 import { paginateBook } from '@/lib/paginator';
 import { analyzeBookLevel, BookLevelAnalysis } from '@/lib/book-level';
+import { loadSubtlex } from '@/lib/subtlex';
 import { Book as BookIcon, BookOpen, Plus, RefreshCw } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import backgroundUrl from '@/assets/english-books-background.png';
@@ -67,12 +68,15 @@ export function LibraryPage() {
     try {
       setError('');
 
-      const allBooks = await getAllBooks();
+      const [allBooks, subtlex] = await Promise.all([
+        getAllBooks(),
+        loadSubtlex(),
+      ]);
       const booksWithProgress = await Promise.all(
         allBooks.map(async (book) => {
           const prog = await getProgress(book.id!);
           const actualPageCount = paginateBook(book.content, 6).totalPages;
-          const levelAnalysis = analyzeBookLevel(book.content);
+          const levelAnalysis = analyzeBookLevel(book.content, subtlex);
 
           const updatedBook: Book = {
             ...book,
@@ -310,6 +314,9 @@ export function LibraryPage() {
                     <span>unknown {item.analysis.unknownRatio.toFixed(1)}%</span>
                     <span>div {item.analysis.readingDiagnostics.lexicalDiversity.toFixed(3)}</span>
                     <span>level {item.analysis.level}</span>
+                    <span>SUB {(item.analysis.readingDiagnostics.subtlexCoverage * 100).toFixed(0)}%</span>
+                    <span>rare {(item.analysis.readingDiagnostics.rareWordRatio * 100).toFixed(1)}%</span>
+                    <span>v.rare {(item.analysis.readingDiagnostics.veryRareWordRatio * 100).toFixed(1)}%</span>
                   </div>
                 </div>
               </motion.div>
