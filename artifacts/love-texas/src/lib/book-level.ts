@@ -255,10 +255,10 @@ function readingDifficultyModel(
   }
 
   if (
-    complexRatio >= 0.10 ||
-    (substantialAverage >= 15.5 && complexRatio >= 0.055) ||
-    (p90 >= 28 && complexRatio >= 0.045) ||
-    (long20Ratio >= 0.22 && complexRatio >= 0.045)
+    complexRatio >= 0.115 ||
+    (substantialAverage >= 16.5 && complexRatio >= 0.075) ||
+    (p90 >= 30 && complexRatio >= 0.070) ||
+    (long20Ratio >= 0.25 && complexRatio >= 0.070)
   ) {
     syntax = 3;
   }
@@ -292,8 +292,10 @@ function readingDifficultyModel(
 
   if (
     (vocabulary.level === 'A2' || vocabulary.level === 'B1') &&
-    vocabulary.longWordRatio >= 0.035 &&
-    vocabulary.unknownRatio >= 16
+    (
+      (vocabulary.longWordRatio >= 0.032 && vocabulary.unknownRatio >= 16) ||
+      (vocabulary.longWordRatio >= 0.030 && vocabulary.lexicalDiversity >= 0.55)
+    )
   ) {
     vocab = Math.min(5, vocab + 1) as 1 | 2 | 3 | 4 | 5;
   }
