@@ -247,12 +247,17 @@ function chooseLevel(params: {
     return 'A1';
   }
 
+  /*
+   * A2: accessible vocabulary with relatively little vocabulary outside
+   * EFLLex. Calibrated conservatively so The Little Prince can fall into A2
+   * without pulling normal B1 fiction (Percy Jackson / Wimpy Kid) down with it.
+   */
   if (
-    a2 >= 70 &&
-    b1 >= 85 &&
-    b2 >= 95 &&
-    unknownRatio <= 17 &&
-    longPct <= 3.5
+    a2 >= 59 &&
+    b1 >= 78 &&
+    b2 >= 91 &&
+    unknownRatio <= 16 &&
+    longPct <= 4.5
   ) {
     return 'A2';
   }
