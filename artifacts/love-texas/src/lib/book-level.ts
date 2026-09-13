@@ -1,5 +1,6 @@
 import type { BookChapter } from './storage';
 import { getEfllexProfile } from './efllex-profile-data';
+import type { SubtlexFrequencyMap } from '@/lib/subtlex';
 
 export type CefrLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
 
@@ -32,6 +33,9 @@ export interface BookLevelAnalysis {
     syntaxScore: number;
     vocabularyScore: number;
     blendedScore: number;
+    subtlexCoverage: number;
+    rareWordRatio: number;
+    veryRareWordRatio: number;
   };
 
   // Existing diagnostics kept so LibraryPage does not break.
@@ -460,7 +464,8 @@ function chooseLevel(params: {
 }
 
 export function analyzeBookLevel(
-  chapters: BookChapter[]
+  chapters: BookChapter[],
+  subtlex?: SubtlexFrequencyMap | null
 ): BookLevelAnalysis {
   const text = sampleBook(chapters);
 
@@ -485,6 +490,7 @@ export function analyzeBookLevel(
         long20Ratio: 0, long30Ratio: 0, complexRatio: 0,
         longWordRatio: 0, lexicalDiversity: 0, lexicalBonus: 0,
         syntaxScore: 1, vocabularyScore: 1, blendedScore: 1,
+        subtlexCoverage: 0, rareWordRatio: 0, veryRareWordRatio: 0,
       },
       averageSentenceLength: 0,
       averageWordLength: 0,
@@ -497,6 +503,25 @@ export function analyzeBookLevel(
 
   const sentences = splitSentences(text);
   const lemmas = words.map(lemma);
+
+  let subtlexKnown = 0;
+  let subtlexRare = 0;
+  let subtlexVeryRare = 0;
+
+  if (subtlex) {
+    for (let i = 0; i < words.length; i++) {
+      const count = subtlex.get(words[i]) ?? subtlex.get(lemmas[i]);
+      if (count == null) continue;
+
+      subtlexKnown += 1;
+      if (count <= 50) subtlexRare += 1;
+      if (count <= 10) subtlexVeryRare += 1;
+    }
+  }
+
+  const subtlexCoverage = words.length ? subtlexKnown / words.length : 0;
+  const rareWordRatio = subtlexKnown ? subtlexRare / subtlexKnown : 0;
+  const veryRareWordRatio = subtlexKnown ? subtlexVeryRare / subtlexKnown : 0;
 
   const counts = new Map<string, number>();
   for (const item of lemmas) {
@@ -612,7 +637,12 @@ export function analyzeBookLevel(
     coverageC1: round1(coverageC1),
     unknownRatio: round1(unknownRatio),
     readingDifficulty: syntaxDifficulty(sentences, { level, unknownRatio, longWordRatio, lexicalDiversity }),
-    readingDiagnostics: getReadingDiagnostics(sentences, { level, unknownRatio, longWordRatio, lexicalDiversity }),
+    readingDiagnostics: {
+      ...getReadingDiagnostics(sentences, { level, unknownRatio, longWordRatio, lexicalDiversity }),
+      subtlexCoverage: round3(subtlexCoverage),
+      rareWordRatio: round3(rareWordRatio),
+      veryRareWordRatio: round3(veryRareWordRatio),
+    },
     averageSentenceLength: round1(averageSentenceLength),
     averageWordLength: Math.round(averageWordLength * 100) / 100,
     longWordRatio: round3(longWordRatio),
