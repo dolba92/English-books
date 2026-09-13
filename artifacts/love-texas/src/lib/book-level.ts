@@ -244,12 +244,26 @@ function syntaxDifficulty(
   if (vocabulary.longWordRatio >= 0.040 && vocabulary.lexicalDiversity >= 0.54) {
     vocab = Math.min(5, vocab + 1) as 1 | 2 | 3 | 4 | 5;
   }
+
+  // Compact contemporary prose can still carry a noticeable lexical load
+  // even when its CEFR band is low and the sentences are short.
+  // This is intentionally narrow so easy action prose is not promoted.
+  if (
+    (vocabulary.level === 'A2' || vocabulary.level === 'B1') &&
+    vocabulary.longWordRatio >= 0.035 &&
+    vocabulary.unknownRatio >= 18
+  ) {
+    vocab = Math.min(5, vocab + 1) as 1 | 2 | 3 | 4 | 5;
+  }
+
   if (vocabulary.unknownRatio >= 28) {
     vocab = Math.min(5, vocab + 1) as 1 | 2 | 3 | 4 | 5;
   }
 
-  // Blend dimensions instead of stacking correlated bonuses.
-  const blended = syntax * 0.55 + vocab * 0.45;
+  // Vocabulary gets a little more influence than raw sentence shape.
+  // This keeps long-but-clear action prose lower, while compact vocabulary-
+  // dense prose can rise to the middle band.
+  const blended = syntax * 0.45 + vocab * 0.55;
   if (blended < 1.65) return 1;
   if (blended < 2.55) return 2;
   if (blended < 3.45) return 3;
