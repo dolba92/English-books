@@ -15,6 +15,47 @@ type LibraryItem = {
   analysis: BookLevelAnalysis;
 };
 
+
+function difficultyLabel(value: 1 | 2 | 3 | 4 | 5): string {
+  if (value === 1) return 'Очень легко';
+  if (value === 2) return 'Легко';
+  if (value === 3) return 'Средне';
+  if (value === 4) return 'Сложно';
+  return 'Очень сложно';
+}
+
+function ReadingDifficulty({
+  value,
+}: {
+  value: 1 | 2 | 3 | 4 | 5;
+}) {
+  return (
+    <div
+      className="mt-2.5 flex items-center justify-center gap-2 rounded-full border border-white/60 bg-white/55 px-3 py-1.5 text-[10px] text-stone-700 shadow-[0_3px_12px_rgba(85,45,35,.06)] backdrop-blur-sm"
+      title={`Сложность чтения: ${value}/5 — ${difficultyLabel(value)}`}
+      aria-label={`Сложность чтения ${value} из 5, ${difficultyLabel(value)}`}
+    >
+      <span className="font-medium whitespace-nowrap">Чтение</span>
+
+      <span className="flex items-end gap-[3px]" aria-hidden="true">
+        {[1, 2, 3, 4, 5].map((bar) => (
+          <span
+            key={bar}
+            className={`block w-[4px] rounded-full transition-all ${
+              bar <= value ? 'bg-primary/80' : 'bg-stone-300/65'
+            }`}
+            style={{ height: `${6 + bar * 1.4}px` }}
+          />
+        ))}
+      </span>
+
+      <span className="font-semibold text-stone-800 whitespace-nowrap">
+        {difficultyLabel(value)}
+      </span>
+    </div>
+  );
+}
+
 export function LibraryPage() {
   const [books, setBooks] = useState<LibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -207,10 +248,6 @@ export function LibraryPage() {
             {books.length} {books.length === 1 ? 'книга' : 'книг'}
           </span>
         </div>
-
-        <div className="inline-flex items-center rounded-full bg-amber-50/85 border border-amber-200 px-3.5 py-2 text-xs text-amber-950 shadow-sm">
-          Диагностика CEFR включена
-        </div>
       </div>
 
       {error && (
@@ -256,29 +293,7 @@ export function LibraryPage() {
                   onDelete={handleDelete}
                 />
 
-                <div className="mt-2 rounded-xl border border-black/10 bg-white/90 p-2.5 text-[10px] leading-[1.35] text-stone-700 shadow-sm">
-                  <div className="mb-1.5 flex items-center justify-between gap-2">
-                    <strong className="text-[11px] text-stone-900">
-                      CEFR: {item.analysis.level}
-                    </strong>
-                    <strong className="text-[11px] text-fuchsia-800">
-                      сложность {item.analysis.readingDifficulty}/5
-                    </strong>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                    <div>A1: <b>{item.analysis.coverageA1}%</b></div>
-                    <div>A2: <b>{item.analysis.coverageA2}%</b></div>
-                    <div>B1: <b>{item.analysis.coverageB1}%</b></div>
-                    <div>B2: <b>{item.analysis.coverageB2}%</b></div>
-                    <div>C1: <b>{item.analysis.coverageC1}%</b></div>
-                    <div>вне EFLLex: <b>{item.analysis.unknownRatio}%</b></div>
-                  </div>
-
-                  <div className="mt-1.5 border-t border-stone-200 pt-1">
-                    предложения: <b>{item.analysis.averageSentenceLength}</b> слов ·
-                    выборка: <b>{item.analysis.sampledWords}</b>
-                  </div>
+                <ReadingDifficulty value={item.analysis.readingDifficulty} />
                 </div>
               </motion.div>
             ))}
