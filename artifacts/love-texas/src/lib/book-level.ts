@@ -219,7 +219,6 @@ function chooseLevel(params: {
   b1: number;
   b2: number;
   unknownRatio: number;
-  averageSentenceLength: number;
   longWordRatio: number;
 }): CefrLevel {
   const {
@@ -228,19 +227,22 @@ function chooseLevel(params: {
     b1,
     b2,
     unknownRatio,
-    averageSentenceLength,
     longWordRatio,
   } = params;
 
   const longPct = longWordRatio * 100;
 
-  // Very easy books: overwhelmingly basic vocabulary + short syntax.
+  /*
+   * CEFR here is vocabulary-only.
+   * Sentence length/syntax is deliberately NOT used here: it belongs to the
+   * separate readingDifficulty 1–5 score.
+   */
+
   if (
     a1 >= 62 &&
     a2 >= 80 &&
     b1 >= 91 &&
-    unknownRatio <= 12 &&
-    averageSentenceLength <= 9.5
+    unknownRatio <= 12
   ) {
     return 'A1';
   }
@@ -250,50 +252,35 @@ function chooseLevel(params: {
     b1 >= 85 &&
     b2 >= 95 &&
     unknownRatio <= 17 &&
-    averageSentenceLength <= 11.0 &&
     longPct <= 3.5
   ) {
     return 'A2';
   }
 
-  /*
-   * B1 is the normal "accessible modern fiction" band.
-   *
-   * Important calibration from our real books:
-   * - Percy Jackson should remain easier than Harry Potter.
-   * - fantasy/proper-name noise must not automatically become C1.
-   * - sentence length and long-word density are used as tie-breakers.
-   */
   const looksB1 =
     b1 >= 76 &&
     b2 >= 90 &&
     unknownRatio < 22 &&
-    longPct < 5.2 &&
-    averageSentenceLength < 13.5;
+    longPct < 5.2;
 
   if (looksB1) {
     return 'B1';
   }
 
-  // B2: richer vocabulary, more unknown literary/fantasy vocabulary,
-  // or noticeably denser sentence/word structure.
   const looksB2 =
     b1 >= 70 &&
     b2 >= 86 &&
     unknownRatio < 29 &&
-    averageSentenceLength < 17.5 &&
     longPct < 8.5;
 
   if (looksB2) {
     return 'B2';
   }
 
-  // C1 requires several genuinely difficult signals at once.
   const looksC1 =
     b1 >= 60 &&
     b2 >= 78 &&
-    unknownRatio < 38 &&
-    averageSentenceLength < 23;
+    unknownRatio < 38;
 
   if (looksC1) {
     return 'C1';
@@ -406,7 +393,6 @@ export function analyzeBookLevel(
     b1: coverageB1,
     b2: coverageB2,
     unknownRatio,
-    averageSentenceLength,
     longWordRatio,
   });
 
