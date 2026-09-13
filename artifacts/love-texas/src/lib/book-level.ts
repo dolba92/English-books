@@ -300,12 +300,32 @@ function readingDifficultyModel(
   const hasSubtlex = vocabulary.subtlexCoverage >= 0.80;
 
   if (hasSubtlex) {
-    // Clearly richer lexical texture: promote one band.
+    // SUBTLEX is a modifier, not an automatic full-band promotion.
+    // Genre-specific words (magic/fantasy names, creatures, invented terms)
+    // can be rare in subtitles without making a B2 book C1-like.
+    //
+    // A1-B1: rarity can reveal genuinely richer vocabulary and lift one band.
+    // B2: keep V3 unless rarity is exceptionally high; this prevents ordinary
+    // fantasy vocabulary from pushing Harry/Dragons to V4.
+    // C1/C2 already have a high CEFR baseline, so no extra promotion is needed.
     if (
-      vocabulary.rareWordRatio >= 0.030 ||
-      vocabulary.veryRareWordRatio >= 0.010
+      (vocabulary.level === 'A1' ||
+        vocabulary.level === 'A2' ||
+        vocabulary.level === 'B1') &&
+      (
+        vocabulary.rareWordRatio >= 0.030 ||
+        vocabulary.veryRareWordRatio >= 0.010
+      )
     ) {
       vocab = Math.min(5, vocab + 1) as 1 | 2 | 3 | 4 | 5;
+    }
+
+    if (
+      vocabulary.level === 'B2' &&
+      vocabulary.rareWordRatio >= 0.060 &&
+      vocabulary.veryRareWordRatio >= 0.020
+    ) {
+      vocab = 4;
     }
 
     // Very common contemporary vocabulary: don't let EFLLex gaps alone
