@@ -305,7 +305,9 @@ export function LibraryPage() {
                   {' · '}cx {(item.analysis.readingDiagnostics.complexRatio * 100).toFixed(0)}%
                   {' · '}long {(item.analysis.readingDiagnostics.longWordRatio * 100).toFixed(1)}%
                   {' · '}div {item.analysis.readingDiagnostics.lexicalDiversity.toFixed(3)}
-                  {' · '}lex +{item.analysis.readingDiagnostics.lexicalBonus}
+                  {' · '}S {item.analysis.readingDiagnostics.syntaxScore}
+                  {' · '}V {item.analysis.readingDiagnostics.vocabularyScore}
+                  {' · '}mix {item.analysis.readingDiagnostics.blendedScore.toFixed(2)}
                 </div>
               </motion.div>
             ))}
