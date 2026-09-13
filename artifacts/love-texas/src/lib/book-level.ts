@@ -256,8 +256,7 @@ function chooseLevel(params: {
     a2 >= 59 &&
     b1 >= 78 &&
     b2 >= 91 &&
-    unknownRatio <= 16 &&
-    longPct <= 4.5
+    unknownRatio <= 16
   ) {
     return 'A2';
   }
