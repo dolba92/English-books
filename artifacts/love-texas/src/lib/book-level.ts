@@ -171,56 +171,97 @@ function tierFromProfile(profile: readonly number[]): number {
 }
 
 function syntaxDifficulty(sentences: string[]): 1 | 2 | 3 | 4 | 5 {
-  const lengths = sentences
-    .map(sentence =>
-      (sentence.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || []).length
-    )
-    .filter(length => length > 0 && length < 120);
+  const stats = sentences
+    .map(sentence => {
+      const words =
+        sentence.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || [];
 
-  if (!lengths.length) return 1;
+      const clauseSignals =
+        sentence.match(
+          /\b(?:although|though|because|since|unless|whereas|while|when|which|who|whose|whom|that|if|as)\b|[;:—–]/gi
+        ) || [];
+
+      return {
+        length: words.length,
+        clauseSignals: clauseSignals.length,
+        commas: (sentence.match(/,/g) || []).length,
+      };
+    })
+    .filter(item => item.length > 0 && item.length < 120);
+
+  if (!stats.length) return 1;
+
+  const lengths = stats.map(item => item.length).sort((a, b) => a - b);
+  const percentile = (p: number) =>
+    lengths[Math.min(lengths.length - 1, Math.floor((lengths.length - 1) * p))];
 
   const average =
     lengths.reduce((sum, length) => sum + length, 0) / lengths.length;
 
-  const sorted = [...lengths].sort((a, b) => a - b);
-  const p75 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.75))];
+  const p75 = percentile(0.75);
+  const p90 = percentile(0.90);
 
-  const complexPunctuationRatio =
-    sentences.filter(sentence => /[;:—–]|,\s+(?:which|who|whose|whom|where|while|although|though|because|since|unless|whereas)\b/i.test(sentence)).length /
-    Math.max(1, sentences.length);
+  const long20Ratio =
+    stats.filter(item => item.length >= 20).length / stats.length;
+
+  const long30Ratio =
+    stats.filter(item => item.length >= 30).length / stats.length;
+
+  const complexRatio =
+    stats.filter(
+      item =>
+        item.length >= 18 &&
+        (item.clauseSignals >= 2 || item.commas >= 2)
+    ).length / stats.length;
 
   /*
-   * Real-book reading scale, intentionally stricter than before.
-   * CEFR vocabulary level is calculated elsewhere and is NOT changed here.
+   * Reading difficulty is based on the distribution of sentence complexity,
+   * not just the average. This prevents short dramatic fragments from making
+   * otherwise dense prose look "very simple".
    *
-   * 1 — very simple prose
-   * 2 — accessible modern fiction
-   * 3 — moderately demanding
-   * 4 — difficult literary prose
-   * 5 — exceptionally dense prose
+   * CEFR vocabulary classification is separate and unchanged.
    */
   let points = 0;
 
-  if (average >= 10) points += 1;
+  // Baseline sentence density.
+  if (average >= 9.5) points += 1;
   if (average >= 12) points += 1;
   if (average >= 15) points += 1;
-  if (average >= 19) points += 1;
-  if (average >= 23) points += 1;
+  if (average >= 20) points += 1;
 
+  // Upper part of the distribution: catches books that mix fragments
+  // with genuinely long sentences.
   if (p75 >= 16) points += 1;
-  if (p75 >= 22) points += 1;
-  if (p75 >= 30) points += 1;
-  if (p75 >= 40) points += 1;
+  if (p75 >= 21) points += 1;
+  if (p75 >= 28) points += 1;
 
-  if (complexPunctuationRatio >= 0.10) points += 1;
-  if (complexPunctuationRatio >= 0.22) points += 1;
+  if (p90 >= 24) points += 1;
+  if (p90 >= 34) points += 1;
+  if (p90 >= 45) points += 1;
 
-  // 1/5 is reserved for genuinely elementary prose.
-  // Ordinary modern fiction should normally begin around 2/5.
-  if (points === 0 && average < 10 && p75 < 16) return 1;
-  if (points <= 2) return 2;
-  if (points <= 4) return 3;
-  if (points <= 7) return 4;
+  // How often the reader actually encounters long / multi-clause syntax.
+  if (long20Ratio >= 0.18) points += 1;
+  if (long20Ratio >= 0.35) points += 1;
+  if (long30Ratio >= 0.10) points += 1;
+
+  if (complexRatio >= 0.08) points += 1;
+  if (complexRatio >= 0.18) points += 1;
+
+  // Reserve 1/5 for genuinely elementary prose.
+  if (
+    points <= 1 &&
+    average < 10 &&
+    p75 < 15 &&
+    p90 < 22 &&
+    long20Ratio < 0.10 &&
+    complexRatio < 0.05
+  ) {
+    return 1;
+  }
+
+  if (points <= 4) return 2;
+  if (points <= 8) return 3;
+  if (points <= 11) return 4;
   return 5;
 }
 
