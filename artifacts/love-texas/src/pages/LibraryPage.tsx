@@ -17,11 +17,11 @@ type LibraryItem = {
 
 
 function difficultyLabel(value: 1 | 2 | 3 | 4 | 5): string {
-  if (value === 1) return 'Очень легко';
-  if (value === 2) return 'Легко';
-  if (value === 3) return 'Средне';
-  if (value === 4) return 'Сложно';
-  return 'Очень сложно';
+  if (value === 1) return 'Очень простая';
+  if (value === 2) return 'Простая';
+  if (value === 3) return 'Средняя';
+  if (value === 4) return 'Сложная';
+  return 'Очень сложная';
 }
 
 function ReadingDifficulty({
