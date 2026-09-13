@@ -294,7 +294,6 @@ export function LibraryPage() {
                 />
 
                 <ReadingDifficulty value={item.analysis.readingDifficulty} />
-                </div>
               </motion.div>
             ))}
           </div>
