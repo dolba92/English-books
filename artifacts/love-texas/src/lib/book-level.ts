@@ -20,6 +20,7 @@ export interface BookLevelAnalysis {
   readingDiagnostics: {
     points: number;
     average: number;
+    substantialAverage: number;
     p75: number;
     p90: number;
     long20Ratio: number;
@@ -218,6 +219,15 @@ function syntaxDifficulty(
   const average =
     lengths.reduce((sum, length) => sum + length, 0) / lengths.length;
 
+  // Ignore tiny dramatic fragments for this secondary average. They affect
+  // rhythm, but should not make otherwise demanding prose look elementary.
+  const substantialLengths = stats
+    .map(item => item.length)
+    .filter(length => length >= 7);
+  const substantialAverage = substantialLengths.length
+    ? substantialLengths.reduce((sum, length) => sum + length, 0) / substantialLengths.length
+    : average;
+
   const p75 = percentile(0.75);
   const p90 = percentile(0.90);
 
@@ -246,6 +256,10 @@ function syntaxDifficulty(
   if (average >= 12) points += 1;
   if (average >= 15) points += 1;
   if (average >= 20) points += 1;
+
+  // Full-sentence load: short stylistic fragments get much less influence.
+  if (substantialAverage >= 15.5) points += 1;
+  if (substantialAverage >= 19.5) points += 1;
 
   if (p75 >= 16) points += 1;
   if (p75 >= 21) points += 1;
@@ -276,10 +290,27 @@ function syntaxDifficulty(
   // Dragons is the kind of prose this catches: many compact sentences,
   // but a noticeably denser layer of long/literary vocabulary.
   let lexicalBonus = 0;
-  if (vocabulary.longWordRatio >= 0.055) lexicalBonus += 2;
-  else if (vocabulary.longWordRatio >= 0.045) lexicalBonus += 1;
 
-  if (vocabulary.lexicalDiversity >= 0.575) lexicalBonus += 1;
+  // A compact sentence can still be hard when vocabulary is dense.
+  // Use combinations, not a title-specific exception.
+  if (
+    vocabulary.longWordRatio >= 0.040 &&
+    (
+      vocabulary.lexicalDiversity >= 0.545 ||
+      vocabulary.level === 'B2' ||
+      vocabulary.level === 'C1' ||
+      vocabulary.level === 'C2'
+    )
+  ) {
+    lexicalBonus += 1;
+  }
+
+  if (
+    vocabulary.longWordRatio >= 0.055 &&
+    vocabulary.lexicalDiversity >= 0.55
+  ) {
+    lexicalBonus += 1;
+  }
 
   lexicalBonus = Math.min(2, lexicalBonus);
   points += lexicalBonus;
@@ -346,7 +377,7 @@ function getReadingDiagnostics(
 
   if (!stats.length) {
     return {
-      points: 0, average: 0, p75: 0, p90: 0,
+      points: 0, average: 0, substantialAverage: 0, p75: 0, p90: 0,
       long20Ratio: 0, long30Ratio: 0, complexRatio: 0,
       longWordRatio: vocabulary.longWordRatio,
       lexicalDiversity: vocabulary.lexicalDiversity,
@@ -359,6 +390,12 @@ function getReadingDiagnostics(
     lengths[Math.min(lengths.length - 1, Math.floor((lengths.length - 1) * p))];
 
   const average = lengths.reduce((sum, length) => sum + length, 0) / lengths.length;
+  const substantialLengths = stats
+    .map(item => item.length)
+    .filter(length => length >= 7);
+  const substantialAverage = substantialLengths.length
+    ? substantialLengths.reduce((sum, length) => sum + length, 0) / substantialLengths.length
+    : average;
   const p75 = percentile(0.75);
   const p90 = percentile(0.90);
   const long20Ratio = stats.filter(item => item.length >= 20).length / stats.length;
@@ -372,6 +409,8 @@ function getReadingDiagnostics(
   if (average >= 12) points += 1;
   if (average >= 15) points += 1;
   if (average >= 20) points += 1;
+  if (substantialAverage >= 15.5) points += 1;
+  if (substantialAverage >= 19.5) points += 1;
   if (p75 >= 16) points += 1;
   if (p75 >= 21) points += 1;
   if (p75 >= 28) points += 1;
@@ -390,15 +429,35 @@ function getReadingDiagnostics(
   if (vocabulary.unknownRatio >= 30) points += 1;
 
   let lexicalBonus = 0;
-  if (vocabulary.longWordRatio >= 0.055) lexicalBonus += 2;
-  else if (vocabulary.longWordRatio >= 0.045) lexicalBonus += 1;
-  if (vocabulary.lexicalDiversity >= 0.575) lexicalBonus += 1;
+
+  // A compact sentence can still be hard when vocabulary is dense.
+  // Use combinations, not a title-specific exception.
+  if (
+    vocabulary.longWordRatio >= 0.040 &&
+    (
+      vocabulary.lexicalDiversity >= 0.545 ||
+      vocabulary.level === 'B2' ||
+      vocabulary.level === 'C1' ||
+      vocabulary.level === 'C2'
+    )
+  ) {
+    lexicalBonus += 1;
+  }
+
+  if (
+    vocabulary.longWordRatio >= 0.055 &&
+    vocabulary.lexicalDiversity >= 0.55
+  ) {
+    lexicalBonus += 1;
+  }
+
   lexicalBonus = Math.min(2, lexicalBonus);
   points += lexicalBonus;
 
   return {
     points,
     average,
+    substantialAverage,
     p75,
     p90,
     long20Ratio,
@@ -522,7 +581,7 @@ export function analyzeBookLevel(
       unknownRatio: 0,
       readingDifficulty: 1,
       readingDiagnostics: {
-        points: 0, average: 0, p75: 0, p90: 0,
+        points: 0, average: 0, substantialAverage: 0, p75: 0, p90: 0,
         long20Ratio: 0, long30Ratio: 0, complexRatio: 0,
         longWordRatio: 0, lexicalDiversity: 0, lexicalBonus: 0,
       },
