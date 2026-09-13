@@ -29,6 +29,9 @@ export interface BookLevelAnalysis {
     longWordRatio: number;
     lexicalDiversity: number;
     lexicalBonus: number;
+    syntaxScore: number;
+    vocabularyScore: number;
+    blendedScore: number;
   };
 
   // Existing diagnostics kept so LibraryPage does not break.
@@ -183,7 +186,7 @@ function tierFromProfile(profile: readonly number[]): number {
   return 5;
 }
 
-function syntaxDifficulty(
+function readingDifficultyModel(
   sentences: string[],
   vocabulary: {
     level: CefrLevel;
@@ -191,7 +194,7 @@ function syntaxDifficulty(
     longWordRatio: number;
     lexicalDiversity: number;
   }
-): 1 | 2 | 3 | 4 | 5 {
+) {
   const stats = sentences
     .map(sentence => {
       const words = sentence.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || [];
@@ -207,16 +210,31 @@ function syntaxDifficulty(
     })
     .filter(item => item.length > 0 && item.length < 120);
 
-  if (!stats.length) return 1;
+  if (!stats.length) {
+    return {
+      difficulty: 1 as 1 | 2 | 3 | 4 | 5,
+      syntax: 1,
+      vocabulary: 1,
+      blended: 1,
+      average: 0,
+      substantialAverage: 0,
+      p75: 0,
+      p90: 0,
+      long20Ratio: 0,
+      long30Ratio: 0,
+      complexRatio: 0,
+    };
+  }
 
   const lengths = stats.map(item => item.length).sort((a, b) => a - b);
   const percentile = (p: number) =>
     lengths[Math.min(lengths.length - 1, Math.floor((lengths.length - 1) * p))];
 
+  const average = lengths.reduce((sum, n) => sum + n, 0) / lengths.length;
   const substantial = stats.filter(item => item.length >= 7);
   const substantialAverage = substantial.length
     ? substantial.reduce((sum, item) => sum + item.length, 0) / substantial.length
-    : lengths.reduce((sum, n) => sum + n, 0) / lengths.length;
+    : average;
 
   const p75 = percentile(0.75);
   const p90 = percentile(0.90);
@@ -226,9 +244,6 @@ function syntaxDifficulty(
     stats.filter(item => item.length >= 18 && (item.clauseSignals >= 2 || item.commas >= 2)).length /
     stats.length;
 
-  // Syntax is scored from structure, not length alone.
-  // Long, linear action sentences stay relatively accessible; embedded /
-  // multi-clause sentences are what move prose into the higher bands.
   let syntax: 1 | 2 | 3 | 4 | 5 = 1;
 
   if (
@@ -264,7 +279,6 @@ function syntaxDifficulty(
     syntax = 5;
   }
 
-  // Vocabulary is a separate dimension.
   let vocab: 1 | 2 | 3 | 4 | 5 = 1;
   if (vocabulary.level === 'A2') vocab = 2;
   else if (vocabulary.level === 'B1') vocab = 2;
@@ -276,9 +290,6 @@ function syntaxDifficulty(
     vocab = Math.min(5, vocab + 1) as 1 | 2 | 3 | 4 | 5;
   }
 
-  // Compact contemporary prose can still carry a noticeable lexical load
-  // even when its CEFR band is low and the sentences are short.
-  // This is intentionally narrow so easy action prose is not promoted.
   if (
     (vocabulary.level === 'A2' || vocabulary.level === 'B1') &&
     vocabulary.longWordRatio >= 0.035 &&
@@ -291,15 +302,40 @@ function syntaxDifficulty(
     vocab = Math.min(5, vocab + 1) as 1 | 2 | 3 | 4 | 5;
   }
 
-  // Vocabulary gets a little more influence than raw sentence shape.
-  // This keeps long-but-clear action prose lower, while compact vocabulary-
-  // dense prose can rise to the middle band.
   const blended = syntax * 0.45 + vocab * 0.55;
-  if (blended < 1.65) return 1;
-  if (blended < 2.55) return 2;
-  if (blended < 3.45) return 3;
-  if (blended < 4.35) return 4;
-  return 5;
+
+  let difficulty: 1 | 2 | 3 | 4 | 5;
+  if (blended < 1.65) difficulty = 1;
+  else if (blended < 2.55) difficulty = 2;
+  else if (blended < 3.45) difficulty = 3;
+  else if (blended < 4.35) difficulty = 4;
+  else difficulty = 5;
+
+  return {
+    difficulty,
+    syntax,
+    vocabulary: vocab,
+    blended,
+    average,
+    substantialAverage,
+    p75,
+    p90,
+    long20Ratio,
+    long30Ratio,
+    complexRatio,
+  };
+}
+
+function syntaxDifficulty(
+  sentences: string[],
+  vocabulary: {
+    level: CefrLevel;
+    unknownRatio: number;
+    longWordRatio: number;
+    lexicalDiversity: number;
+  }
+): 1 | 2 | 3 | 4 | 5 {
+  return readingDifficultyModel(sentences, vocabulary).difficulty;
 }
 
 function getReadingDiagnostics(
@@ -311,62 +347,23 @@ function getReadingDiagnostics(
     lexicalDiversity: number;
   }
 ) {
-  const stats = sentences
-    .map(sentence => {
-      const words = sentence.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || [];
-      const clauseSignals =
-        sentence.match(
-          /\b(?:although|though|because|since|unless|whereas|while|when|which|who|whose|whom|that|if|as)\b|[;:—–]/gi
-        ) || [];
-      return {
-        length: words.length,
-        clauseSignals: clauseSignals.length,
-        commas: (sentence.match(/,/g) || []).length,
-      };
-    })
-    .filter(item => item.length > 0 && item.length < 120);
-
-  if (!stats.length) {
-    return {
-      points: 0, average: 0, substantialAverage: 0, p75: 0, p90: 0,
-      long20Ratio: 0, long30Ratio: 0, complexRatio: 0,
-      longWordRatio: vocabulary.longWordRatio,
-      lexicalDiversity: vocabulary.lexicalDiversity,
-      lexicalBonus: 0,
-    };
-  }
-
-  const lengths = stats.map(item => item.length).sort((a, b) => a - b);
-  const percentile = (p: number) =>
-    lengths[Math.min(lengths.length - 1, Math.floor((lengths.length - 1) * p))];
-  const average = lengths.reduce((sum, n) => sum + n, 0) / lengths.length;
-  const substantial = stats.filter(item => item.length >= 7);
-  const substantialAverage = substantial.length
-    ? substantial.reduce((sum, item) => sum + item.length, 0) / substantial.length
-    : average;
-  const p75 = percentile(0.75);
-  const p90 = percentile(0.90);
-  const long20Ratio = stats.filter(item => item.length >= 20).length / stats.length;
-  const long30Ratio = stats.filter(item => item.length >= 30).length / stats.length;
-  const complexRatio =
-    stats.filter(item => item.length >= 18 && (item.clauseSignals >= 2 || item.commas >= 2)).length /
-    stats.length;
-
-  // For the temporary UI, P now shows the final 1–5 result.
-  const points = syntaxDifficulty(sentences, vocabulary);
+  const model = readingDifficultyModel(sentences, vocabulary);
 
   return {
-    points,
-    average,
-    substantialAverage,
-    p75,
-    p90,
-    long20Ratio,
-    long30Ratio,
-    complexRatio,
+    points: model.difficulty,
+    average: model.average,
+    substantialAverage: model.substantialAverage,
+    p75: model.p75,
+    p90: model.p90,
+    long20Ratio: model.long20Ratio,
+    long30Ratio: model.long30Ratio,
+    complexRatio: model.complexRatio,
     longWordRatio: vocabulary.longWordRatio,
     lexicalDiversity: vocabulary.lexicalDiversity,
     lexicalBonus: 0,
+    syntaxScore: model.syntax,
+    vocabularyScore: model.vocabulary,
+    blendedScore: model.blended,
   };
 }
 
@@ -485,6 +482,7 @@ export function analyzeBookLevel(
         points: 0, average: 0, substantialAverage: 0, p75: 0, p90: 0,
         long20Ratio: 0, long30Ratio: 0, complexRatio: 0,
         longWordRatio: 0, lexicalDiversity: 0, lexicalBonus: 0,
+        syntaxScore: 1, vocabularyScore: 1, blendedScore: 1,
       },
       averageSentenceLength: 0,
       averageWordLength: 0,
