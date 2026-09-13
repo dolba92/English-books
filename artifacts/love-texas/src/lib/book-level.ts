@@ -171,35 +171,54 @@ function tierFromProfile(profile: readonly number[]): number {
 }
 
 function syntaxDifficulty(sentences: string[]): 1 | 2 | 3 | 4 | 5 {
-  if (!sentences.length) return 1;
+  const lengths = sentences
+    .map(sentence =>
+      (sentence.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || []).length
+    )
+    .filter(length => length > 0 && length < 120);
 
-  let totalWords = 0;
-  let totalComplexity = 0;
+  if (!lengths.length) return 1;
 
-  const subordinate =
-    /\b(although|though|whereas|while|unless|despite|whilst|whenever|wherever|however|which|whose|whom|whether|because|since|after|before|until|once|if|when)\b/gi;
+  const average =
+    lengths.reduce((sum, length) => sum + length, 0) / lengths.length;
 
-  for (const sentence of sentences) {
-    const words = sentence.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || [];
-    totalWords += words.length;
+  const sorted = [...lengths].sort((a, b) => a - b);
+  const p75 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.75))];
 
-    const clauses = (sentence.match(subordinate) || []).length;
-    const punctuation = (sentence.match(/[,;:—–]/g) || []).length;
+  const complexPunctuationRatio =
+    sentences.filter(sentence => /[;:—–]|,\s+(?:which|who|whose|whom|where|while|although|though|because|since|unless|whereas)\b/i.test(sentence)).length /
+    Math.max(1, sentences.length);
 
-    totalComplexity += clauses + Math.min(3, punctuation * 0.28);
-  }
+  /*
+   * Real-book reading scale, intentionally stricter than before.
+   * CEFR vocabulary level is calculated elsewhere and is NOT changed here.
+   *
+   * 1 — very simple prose
+   * 2 — accessible modern fiction
+   * 3 — moderately demanding
+   * 4 — difficult literary prose
+   * 5 — exceptionally dense prose
+   */
+  let points = 0;
 
-  const avgWords = totalWords / sentences.length;
-  const avgComplexity = totalComplexity / sentences.length;
+  if (average >= 10) points += 1;
+  if (average >= 12) points += 1;
+  if (average >= 15) points += 1;
+  if (average >= 19) points += 1;
+  if (average >= 23) points += 1;
 
-  const raw =
-    (avgWords - 8) * 0.11 +
-    avgComplexity * 0.9;
+  if (p75 >= 16) points += 1;
+  if (p75 >= 22) points += 1;
+  if (p75 >= 30) points += 1;
+  if (p75 >= 40) points += 1;
 
-  if (raw < 1.4) return 1;
-  if (raw < 2.2) return 2;
-  if (raw < 3.1) return 3;
-  if (raw < 4.2) return 4;
+  if (complexPunctuationRatio >= 0.10) points += 1;
+  if (complexPunctuationRatio >= 0.22) points += 1;
+
+  if (points <= 1) return 1;
+  if (points <= 3) return 2;
+  if (points <= 5) return 3;
+  if (points <= 7) return 4;
   return 5;
 }
 
