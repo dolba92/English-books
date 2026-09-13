@@ -302,6 +302,9 @@ export function LibraryPage() {
                   {' · '}20+ {(item.analysis.readingDiagnostics.long20Ratio * 100).toFixed(0)}%
                   {' · '}30+ {(item.analysis.readingDiagnostics.long30Ratio * 100).toFixed(0)}%
                   {' · '}cx {(item.analysis.readingDiagnostics.complexRatio * 100).toFixed(0)}%
+                  {' · '}long {(item.analysis.readingDiagnostics.longWordRatio * 100).toFixed(1)}%
+                  {' · '}div {item.analysis.readingDiagnostics.lexicalDiversity.toFixed(3)}
+                  {' · '}lex +{item.analysis.readingDiagnostics.lexicalBonus}
                 </div>
               </motion.div>
             ))}
