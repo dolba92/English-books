@@ -17,6 +17,15 @@ export interface BookLevelAnalysis {
 
   // Separate reading/syntax difficulty, Linga-style.
   readingDifficulty: 1 | 2 | 3 | 4 | 5;
+  readingDiagnostics: {
+    points: number;
+    average: number;
+    p75: number;
+    p90: number;
+    long20Ratio: number;
+    long30Ratio: number;
+    complexRatio: number;
+  };
 
   // Existing diagnostics kept so LibraryPage does not break.
   averageSentenceLength: number;
@@ -293,6 +302,68 @@ function syntaxDifficulty(
   return 5;
 }
 
+
+function getReadingDiagnostics(
+  sentences: string[],
+  vocabulary: { level: CefrLevel; unknownRatio: number }
+) {
+  const stats = sentences
+    .map(sentence => {
+      const words = sentence.match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g) || [];
+      const clauseSignals =
+        sentence.match(
+          /\b(?:although|though|because|since|unless|whereas|while|when|which|who|whose|whom|that|if|as)\b|[;:—–]/gi
+        ) || [];
+      return {
+        length: words.length,
+        clauseSignals: clauseSignals.length,
+        commas: (sentence.match(/,/g) || []).length,
+      };
+    })
+    .filter(item => item.length > 0 && item.length < 120);
+
+  if (!stats.length) {
+    return { points: 0, average: 0, p75: 0, p90: 0, long20Ratio: 0, long30Ratio: 0, complexRatio: 0 };
+  }
+
+  const lengths = stats.map(item => item.length).sort((a, b) => a - b);
+  const percentile = (p: number) =>
+    lengths[Math.min(lengths.length - 1, Math.floor((lengths.length - 1) * p))];
+
+  const average = lengths.reduce((sum, length) => sum + length, 0) / lengths.length;
+  const p75 = percentile(0.75);
+  const p90 = percentile(0.90);
+  const long20Ratio = stats.filter(item => item.length >= 20).length / stats.length;
+  const long30Ratio = stats.filter(item => item.length >= 30).length / stats.length;
+  const complexRatio =
+    stats.filter(item => item.length >= 18 && (item.clauseSignals >= 2 || item.commas >= 2)).length /
+    stats.length;
+
+  let points = 0;
+  if (average >= 9.5) points += 1;
+  if (average >= 12) points += 1;
+  if (average >= 15) points += 1;
+  if (average >= 20) points += 1;
+  if (p75 >= 16) points += 1;
+  if (p75 >= 21) points += 1;
+  if (p75 >= 28) points += 1;
+  if (p90 >= 24) points += 1;
+  if (p90 >= 34) points += 1;
+  if (p90 >= 45) points += 1;
+  if (long20Ratio >= 0.18) points += 1;
+  if (long20Ratio >= 0.35) points += 1;
+  if (long30Ratio >= 0.10) points += 1;
+  if (complexRatio >= 0.08) points += 1;
+  if (complexRatio >= 0.18) points += 1;
+  if (vocabulary.level === 'B2') points += 1;
+  if (vocabulary.level === 'C1') points += 2;
+  if (vocabulary.level === 'C2') points += 3;
+  if (vocabulary.unknownRatio >= 22) points += 1;
+  if (vocabulary.unknownRatio >= 30) points += 1;
+
+  return { points, average, p75, p90, long20Ratio, long30Ratio, complexRatio };
+}
+
 /**
  * We deliberately cap the influence of repeated words.
  * A word appearing 300 times should matter more than a hapax,
@@ -404,6 +475,10 @@ export function analyzeBookLevel(
       coverageC1: 0,
       unknownRatio: 0,
       readingDifficulty: 1,
+      readingDiagnostics: {
+        points: 0, average: 0, p75: 0, p90: 0,
+        long20Ratio: 0, long30Ratio: 0, complexRatio: 0,
+      },
       averageSentenceLength: 0,
       averageWordLength: 0,
       longWordRatio: 0,
@@ -530,6 +605,7 @@ export function analyzeBookLevel(
     coverageC1: round1(coverageC1),
     unknownRatio: round1(unknownRatio),
     readingDifficulty: syntaxDifficulty(sentences, { level, unknownRatio }),
+    readingDiagnostics: getReadingDiagnostics(sentences, { level, unknownRatio }),
     averageSentenceLength: round1(averageSentenceLength),
     averageWordLength: Math.round(averageWordLength * 100) / 100,
     longWordRatio: round3(longWordRatio),
