@@ -215,9 +215,11 @@ function syntaxDifficulty(sentences: string[]): 1 | 2 | 3 | 4 | 5 {
   if (complexPunctuationRatio >= 0.10) points += 1;
   if (complexPunctuationRatio >= 0.22) points += 1;
 
-  if (points <= 1) return 1;
-  if (points <= 3) return 2;
-  if (points <= 5) return 3;
+  // 1/5 is reserved for genuinely elementary prose.
+  // Ordinary modern fiction should normally begin around 2/5.
+  if (points === 0 && average < 10 && p75 < 16) return 1;
+  if (points <= 2) return 2;
+  if (points <= 4) return 3;
   if (points <= 7) return 4;
   return 5;
 }
