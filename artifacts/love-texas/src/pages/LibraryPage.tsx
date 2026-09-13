@@ -298,27 +298,7 @@ export function LibraryPage() {
                 />
 
                 <ReadingDifficulty value={item.analysis.readingDifficulty} />
-                <div className="mt-2 rounded-xl border border-white/50 bg-white/70 px-2.5 py-2 text-[10px] leading-4 text-[#6f4a4a] shadow-sm">
-                  <div className="mb-1 text-center font-semibold text-[#5e3d3d]">
-                    Syntax {item.analysis.readingDiagnostics.syntaxScore}
-                    {' · '}Vocabulary {item.analysis.readingDiagnostics.vocabularyScore}
-                    {' · '}Mix {item.analysis.readingDiagnostics.blendedScore.toFixed(2)}
-                  </div>
-                  <div className="grid grid-cols-3 gap-x-2 gap-y-0.5 text-center">
-                    <span>avg {item.analysis.readingDiagnostics.average.toFixed(1)}</span>
-                    <span>full {item.analysis.readingDiagnostics.substantialAverage.toFixed(1)}</span>
-                    <span>p90 {item.analysis.readingDiagnostics.p90}</span>
-                    <span>20+ {(item.analysis.readingDiagnostics.long20Ratio * 100).toFixed(0)}%</span>
-                    <span>complex {(item.analysis.readingDiagnostics.complexRatio * 100).toFixed(0)}%</span>
-                    <span>long {(item.analysis.readingDiagnostics.longWordRatio * 100).toFixed(1)}%</span>
-                    <span>unknown {item.analysis.unknownRatio.toFixed(1)}%</span>
-                    <span>div {item.analysis.readingDiagnostics.lexicalDiversity.toFixed(3)}</span>
-                    <span>level {item.analysis.level}</span>
-                    <span>SUB {(item.analysis.readingDiagnostics.subtlexCoverage * 100).toFixed(0)}%</span>
-                    <span>rare {(item.analysis.readingDiagnostics.rareWordRatio * 100).toFixed(1)}%</span>
-                    <span>v.rare {(item.analysis.readingDiagnostics.veryRareWordRatio * 100).toFixed(1)}%</span>
-                  </div>
-                </div>
+
               </motion.div>
             ))}
           </div>
