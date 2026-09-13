@@ -226,12 +226,43 @@ function syntaxDifficulty(
     stats.filter(item => item.length >= 18 && (item.clauseSignals >= 2 || item.commas >= 2)).length /
     stats.length;
 
-  // Syntax is scored once from a compact set of non-duplicative signals.
+  // Syntax is scored from structure, not length alone.
+  // Long, linear action sentences stay relatively accessible; embedded /
+  // multi-clause sentences are what move prose into the higher bands.
   let syntax: 1 | 2 | 3 | 4 | 5 = 1;
-  if (substantialAverage >= 12.5 || p90 >= 20 || long20Ratio >= 0.08) syntax = 2;
-  if (substantialAverage >= 15.5 || p90 >= 27 || long20Ratio >= 0.20 || complexRatio >= 0.10) syntax = 3;
-  if ((p90 >= 36 && long30Ratio >= 0.10) || substantialAverage >= 20 || complexRatio >= 0.20) syntax = 4;
-  if ((p90 >= 48 && long30Ratio >= 0.22) || substantialAverage >= 25 || complexRatio >= 0.32) syntax = 5;
+
+  if (
+    substantialAverage >= 12.5 ||
+    p90 >= 20 ||
+    long20Ratio >= 0.08
+  ) {
+    syntax = 2;
+  }
+
+  if (
+    complexRatio >= 0.10 ||
+    (substantialAverage >= 15.5 && complexRatio >= 0.055) ||
+    (p90 >= 28 && complexRatio >= 0.045) ||
+    (long20Ratio >= 0.22 && complexRatio >= 0.045)
+  ) {
+    syntax = 3;
+  }
+
+  if (
+    complexRatio >= 0.20 ||
+    (p90 >= 38 && long30Ratio >= 0.10 && complexRatio >= 0.09) ||
+    (substantialAverage >= 20 && complexRatio >= 0.10)
+  ) {
+    syntax = 4;
+  }
+
+  if (
+    complexRatio >= 0.32 ||
+    (p90 >= 50 && long30Ratio >= 0.22 && complexRatio >= 0.16) ||
+    (substantialAverage >= 25 && complexRatio >= 0.18)
+  ) {
+    syntax = 5;
+  }
 
   // Vocabulary is a separate dimension.
   let vocab: 1 | 2 | 3 | 4 | 5 = 1;
@@ -251,7 +282,7 @@ function syntaxDifficulty(
   if (
     (vocabulary.level === 'A2' || vocabulary.level === 'B1') &&
     vocabulary.longWordRatio >= 0.035 &&
-    vocabulary.unknownRatio >= 18
+    vocabulary.unknownRatio >= 16
   ) {
     vocab = Math.min(5, vocab + 1) as 1 | 2 | 3 | 4 | 5;
   }
