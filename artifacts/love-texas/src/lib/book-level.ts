@@ -273,7 +273,21 @@ function syntaxDifficulty(
     return 1;
   }
 
-  if (points <= 4) return 2;
+  /*
+   * Promote a borderline B2+ book to 3/5 only when the syntax itself is
+   * already moderately dense. CEFR remains a separate calculation.
+   */
+  const denseB2Prose =
+    (vocabulary.level === 'B2' ||
+      vocabulary.level === 'C1' ||
+      vocabulary.level === 'C2') &&
+    (
+      (p90 >= 27 && complexRatio >= 0.07) ||
+      (p75 >= 18 && long20Ratio >= 0.22) ||
+      (average >= 11.5 && complexRatio >= 0.10)
+    );
+
+  if (points <= 4 && !denseB2Prose) return 2;
   if (points <= 8) return 3;
   if (points <= 11) return 4;
   return 5;
