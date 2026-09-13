@@ -170,7 +170,13 @@ function tierFromProfile(profile: readonly number[]): number {
   return 5;
 }
 
-function syntaxDifficulty(sentences: string[]): 1 | 2 | 3 | 4 | 5 {
+function syntaxDifficulty(
+  sentences: string[],
+  vocabulary: {
+    level: CefrLevel;
+    unknownRatio: number;
+  }
+): 1 | 2 | 3 | 4 | 5 {
   const stats = sentences
     .map(sentence => {
       const words =
@@ -215,22 +221,18 @@ function syntaxDifficulty(sentences: string[]): 1 | 2 | 3 | 4 | 5 {
     ).length / stats.length;
 
   /*
-   * Reading difficulty is based on the distribution of sentence complexity,
-   * not just the average. This prevents short dramatic fragments from making
-   * otherwise dense prose look "very simple".
-   *
-   * CEFR vocabulary classification is separate and unchanged.
+   * Overall reading difficulty:
+   * syntax is still the main signal, but vocabulary adds a small amount.
+   * CEFR itself remains calculated separately and is NOT changed here.
    */
   let points = 0;
 
-  // Baseline sentence density.
+  // Syntax / sentence distribution.
   if (average >= 9.5) points += 1;
   if (average >= 12) points += 1;
   if (average >= 15) points += 1;
   if (average >= 20) points += 1;
 
-  // Upper part of the distribution: catches books that mix fragments
-  // with genuinely long sentences.
   if (p75 >= 16) points += 1;
   if (p75 >= 21) points += 1;
   if (p75 >= 28) points += 1;
@@ -239,7 +241,6 @@ function syntaxDifficulty(sentences: string[]): 1 | 2 | 3 | 4 | 5 {
   if (p90 >= 34) points += 1;
   if (p90 >= 45) points += 1;
 
-  // How often the reader actually encounters long / multi-clause syntax.
   if (long20Ratio >= 0.18) points += 1;
   if (long20Ratio >= 0.35) points += 1;
   if (long30Ratio >= 0.10) points += 1;
@@ -247,14 +248,27 @@ function syntaxDifficulty(sentences: string[]): 1 | 2 | 3 | 4 | 5 {
   if (complexRatio >= 0.08) points += 1;
   if (complexRatio >= 0.18) points += 1;
 
-  // Reserve 1/5 for genuinely elementary prose.
+  // Small vocabulary contribution.
+  // This is intentionally weaker than syntax, but prevents lexically dense
+  // B2/C1 books from looking "simple" just because they use short fragments.
+  if (vocabulary.level === 'B2') points += 1;
+  if (vocabulary.level === 'C1') points += 2;
+  if (vocabulary.level === 'C2') points += 3;
+
+  if (vocabulary.unknownRatio >= 22) points += 1;
+  if (vocabulary.unknownRatio >= 30) points += 1;
+
+  // 1/5 stays reserved for genuinely elementary prose.
   if (
     points <= 1 &&
     average < 10 &&
     p75 < 15 &&
     p90 < 22 &&
     long20Ratio < 0.10 &&
-    complexRatio < 0.05
+    complexRatio < 0.05 &&
+    vocabulary.level !== 'B2' &&
+    vocabulary.level !== 'C1' &&
+    vocabulary.level !== 'C2'
   ) {
     return 1;
   }
@@ -485,7 +499,7 @@ export function analyzeBookLevel(
         coverageB2 * 0.25 +
         coverageC1 * 0.25 +
         Math.min(15, unknownRatio) +
-        syntaxDifficulty(sentences) * 3
+        syntaxDifficulty(sentences, { level, unknownRatio }) * 3
       ) * 10
     ) / 10;
 
@@ -501,7 +515,7 @@ export function analyzeBookLevel(
     coverageB2: round1(coverageB2),
     coverageC1: round1(coverageC1),
     unknownRatio: round1(unknownRatio),
-    readingDifficulty: syntaxDifficulty(sentences),
+    readingDifficulty: syntaxDifficulty(sentences, { level, unknownRatio }),
     averageSentenceLength: round1(averageSentenceLength),
     averageWordLength: Math.round(averageWordLength * 100) / 100,
     longWordRatio: round3(longWordRatio),
