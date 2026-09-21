@@ -51,7 +51,7 @@ export function paginateBook(
     if (currentPage.length > 0) pages.push(currentPage);
     if (pages.length === 0) pages.push([]);
     totalPages += pages.length;
-    return { title: chapter.title, pages, images: chapter.images };
+    return { title: chapter.title, pages, images: chapter.images, standaloneImagePage: chapter.standaloneImagePage };
   });
 
   return { paginatedChapters, totalPages };
@@ -84,8 +84,9 @@ export interface MeasuredPaginationOptions {
  * True browser-height pagination with real chapter boundaries.
  *
  * Every BookChapter starts on a fresh reader page, while the text inside that
- * chapter is packed by the actual rendered DOM height. This keeps chapters
- * visually separate without going back to fixed paragraph/character limits.
+ * chapter is packed by the actual rendered DOM height.
+ *
+ * EPUB image-only spine items are preserved as their own reader pages.
  */
 export function paginateBookContinuousMeasured(
   chapters: BookChapter[],
@@ -140,16 +141,6 @@ export function paginateBookContinuousMeasured(
   } as CSSStyleDeclaration);
   document.body.appendChild(measurer);
 
-  /**
-   * PERFORMANCE NOTE:
-   * The old paginator rebuilt the whole hidden page DOM for every single
-   * "does this fit?" check. On a full novel that meant thousands of complete
-   * DOM rebuilds and could block the browser for several seconds.
-   *
-   * This version keeps the current page mounted in the hidden measurer and
-   * appends only one temporary candidate element for each check. The resulting
-   * page boundaries stay the same, but opening/reflowing books is much faster.
-   */
   const createBlockElement = (block: ContinuousPageBlock, index: number): HTMLElement[] => {
     if (block.kind === 'heading') {
       const elements: HTMLElement[] = [];
@@ -214,8 +205,6 @@ export function paginateBookContinuousMeasured(
     const words = text.trim().split(/\s+/).filter(Boolean);
     if (words.length <= 1) return [text, ''];
 
-    // Mount one temporary paragraph and only change its text while binary
-    // searching. This avoids rebuilding all existing page elements each time.
     const temp = createBlockElement(
       { kind: 'paragraph', text: '' },
       currentBlockCount,
@@ -290,15 +279,28 @@ export function paginateBookContinuousMeasured(
       if (current.length) flush();
 
       remaining = tail || (head ? '' : remaining);
-
-      // If nothing could fit into a non-empty page, flush() made room and the
-      // loop retries the same paragraph on a fresh page.
       if (!head && remaining) continue;
     }
   };
 
   try {
     chapters.forEach((chapter, chapterIndex) => {
+      // Image-only XHTML in the EPUB spine is a real standalone page.
+      // Do not merge it into the previous/next prose chapter and do not invent
+      // a "Chapter N" title for it.
+      if (chapter.standaloneImagePage && chapter.images?.length) {
+        flush();
+        activeTitle = chapter.title || '';
+        currentPageTitle = activeTitle;
+        pushBlock({
+          kind: 'heading',
+          title: chapter.title || '',
+          images: chapter.images,
+        });
+        flush();
+        return;
+      }
+
       const title = chapter.title || `Chapter ${chapterIndex + 1}`;
 
       // Every real chapter starts on a fresh reader page.
