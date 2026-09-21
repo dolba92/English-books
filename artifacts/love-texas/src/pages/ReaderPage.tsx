@@ -111,7 +111,7 @@ interface PaginationLayoutSettings {
 }
 
 const paginationMemoryCache = new Map<string, PageData[]>();
-const PAGINATION_CACHE_VERSION = 1;
+const PAGINATION_CACHE_VERSION = 2;
 
 
 // ── Word Tooltip ─────────────────────────────────────────────────────────────
@@ -795,7 +795,9 @@ export function ReaderPage() {
       const hintReserve = showHint ? (isMobileLayout ? 112 : 84) : 0;
       const contentHeight = Math.max(180, viewportHeight - 56 - 44 - verticalPadding - hintReserve - 24);
       const fontCssForMeasure = getFontCss(paginationLayout.fontFamily);
-      const illustrationReserve = paginationLayout.showIllustrations ? Math.min(viewportHeight * 0.38, 300) : 0;
+      const illustrationReserve = paginationLayout.showIllustrations
+        ? Math.max(0, Math.min(contentHeight * 0.78, viewportHeight - 170))
+        : 0;
 
       const cacheKey = JSON.stringify({
         v: PAGINATION_CACHE_VERSION,
@@ -1215,6 +1217,17 @@ export function ReaderPage() {
                               alt=""
                               className="reader-illustration"
                               loading="lazy"
+                              style={{
+                                display: 'block',
+                                width: 'auto',
+                                height: 'auto',
+                                maxWidth: isMobile ? '100%' : 'min(92%, 1100px)',
+                                maxHeight: isMobile
+                                  ? 'calc(100dvh - 150px)'
+                                  : 'calc(100dvh - 175px)',
+                                objectFit: 'contain',
+                                margin: '0 auto 20px',
+                              }}
                             />
                           ))}
                           {block.title && (
