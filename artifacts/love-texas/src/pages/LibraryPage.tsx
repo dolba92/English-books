@@ -32,7 +32,7 @@ function ReadingDifficulty({
 }) {
   return (
     <div
-      className="mt-2.5 flex items-center justify-center gap-2 rounded-full border border-white/55 bg-white/28 px-3 py-1.5 text-[10px] text-black shadow-[0_5px_18px_rgba(57,35,26,.10),inset_0_1px_0_rgba(255,255,255,.62)] backdrop-blur-[18px] backdrop-saturate-[135%]"
+      className="mt-2.5 flex items-center justify-center gap-2 rounded-full border border-white/55 bg-white/16 px-3 py-1.5 text-[10px] text-black shadow-[0_5px_18px_rgba(57,35,26,.10),inset_0_1px_0_rgba(255,255,255,.62)] backdrop-blur-[18px] backdrop-saturate-[135%]"
       title={`Сложность чтения: ${value}/5 — ${difficultyLabel(value)}`}
       aria-label={`Сложность чтения ${value} из 5, ${difficultyLabel(value)}`}
     >
