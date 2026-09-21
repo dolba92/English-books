@@ -10,7 +10,7 @@ function parseHtml(text: string): Document {
 
 function archivePath(base: string, href: string): string {
   const cleanHref = href.split('#')[0].split('?')[0];
-  const parts = `${base}${safeDecode(cleanHref)}`.split('/');
+  const parts = `${base}${decodeURIComponent(cleanHref)}`.split('/');
   const result: string[] = [];
   for (const part of parts) {
     if (!part || part === '.') continue;
@@ -20,28 +20,13 @@ function archivePath(base: string, href: string): string {
   return result.join('/');
 }
 
-function safeDecode(value: string): string {
-  try { return decodeURIComponent(value); } catch { return value; }
-}
-
-function normalizeArchiveKey(value: string): string {
-  return safeDecode(value)
-    .replace(/\\/g, '/')
-    .replace(/^\/+/, '')
-    .replace(/\/+/g, '/')
-    .toLowerCase();
-}
-
 function findZipFile(zip: JSZip, path: string): JSZip.JSZipObject | undefined {
-  const clean = path.replace(/^\/+/, '');
-  const candidates = [clean, safeDecode(clean)];
+  const candidates = [path, decodeURIComponent(path), encodeURI(path)];
   for (const candidate of candidates) {
     const file = zip.file(candidate);
     if (file) return file;
   }
-
-  const wanted = normalizeArchiveKey(clean);
-  return Object.values(zip.files).find(file => !file.dir && normalizeArchiveKey(file.name) === wanted);
+  return undefined;
 }
 
 function normalizeText(value: string): string {
@@ -138,61 +123,94 @@ async function findImageInCoverPage(zip: JSZip, page: ManifestItem, manifest: Ma
   return imageDataUrl(zip, imageItem);
 }
 
+function mimeFromPath(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase();
+  if (ext === 'png') return 'image/png';
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'svg' || ext === 'svgz') return 'image/svg+xml';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'avif') return 'image/avif';
+  if (ext === 'bmp') return 'image/bmp';
+  if (ext === 'jpg' || ext === 'jpeg' || ext === 'jpe') return 'image/jpeg';
+  return 'application/octet-stream';
+}
+
+async function imageDataUrlByHref(
+  zip: JSZip,
+  pageHref: string,
+  source: string,
+  manifest: ManifestItem[],
+): Promise<string | undefined> {
+  if (!source || /^data:/i.test(source)) return source || undefined;
+
+  const cleanSource = source.trim().replace(/^['"]|['"]$/g, '');
+  const imageHref = archivePath(
+    pageHref.slice(0, pageHref.lastIndexOf('/') + 1),
+    cleanSource,
+  );
+
+  const normalized = (value: string) => {
+    try {
+      return decodeURIComponent(value).replace(/^\.\//, '').toLowerCase();
+    } catch {
+      return value.replace(/^\.\//, '').toLowerCase();
+    }
+  };
+
+  const wanted = normalized(imageHref);
+  const imageItem = manifest.find(item => normalized(item.href) === wanted);
+  if (imageItem?.mediaType.startsWith('image/')) {
+    return imageDataUrl(zip, imageItem);
+  }
+
+  // Some EPUBs reference a real ZIP image that is missing or malformed in OPF manifest.
+  const directFile =
+    findZipFile(zip, imageHref) ||
+    Object.values(zip.files).find(entry => !entry.dir && normalized(entry.name) === wanted);
+
+  if (!directFile) return undefined;
+  const bytes = await directFile.async('uint8array');
+  return fileToBase64(new Blob(
+    [bytes.buffer as ArrayBuffer],
+    { type: mimeFromPath(directFile.name) },
+  ));
+}
+
 async function extractImagesFromHtml(zip: JSZip, page: ManifestItem, manifest: ManifestItem[]): Promise<string[]> {
   const file = findZipFile(zip, page.href);
   if (!file) return [];
+
   const doc = parseHtml(await file.async('text'));
+  const sources: string[] = [];
+
+  for (const node of Array.from(doc.querySelectorAll('img, image'))) {
+    const source =
+      node.getAttribute('src') ||
+      node.getAttribute('href') ||
+      node.getAttribute('xlink:href');
+
+    if (source) sources.push(source);
+
+    const srcset = node.getAttribute('srcset');
+    if (srcset) {
+      for (const candidate of srcset.split(',')) {
+        const value = candidate.trim().split(/\s+/)[0];
+        if (value) sources.push(value);
+      }
+    }
+  }
+
   const imageUrls: string[] = [];
   const seen = new Set<string>();
 
-  const sources: string[] = [];
-  doc.querySelectorAll('img').forEach(node => {
-    const src = node.getAttribute('src');
-    if (src) sources.push(src);
-    const srcset = node.getAttribute('srcset');
-    if (srcset) {
-      srcset.split(',').forEach(part => {
-        const candidate = part.trim().split(/\s+/)[0];
-        if (candidate) sources.push(candidate);
-      });
-    }
-  });
-  doc.querySelectorAll('image').forEach(node => {
-    const src = node.getAttribute('href') || node.getAttribute('xlink:href');
-    if (src) sources.push(src);
-  });
-
   for (const source of sources) {
-    if (/^data:image\//i.test(source)) {
-      if (!seen.has(source)) { seen.add(source); imageUrls.push(source); }
-      continue;
-    }
-
-    const imageHref = archivePath(page.href.slice(0, page.href.lastIndexOf('/') + 1), source);
-    const imageItem = manifest.find(item => normalizeArchiveKey(item.href) === normalizeArchiveKey(imageHref));
-    let dataUrl: string | undefined;
-
-    if (imageItem?.mediaType.startsWith('image/')) {
-      dataUrl = await imageDataUrl(zip, imageItem);
-    } else {
-      const imageFile = findZipFile(zip, imageHref);
-      if (imageFile) {
-        const bytes = await imageFile.async('uint8array');
-        const ext = imageHref.split('.').pop()?.toLowerCase();
-        const mime = ext === 'png' ? 'image/png'
-          : ext === 'gif' ? 'image/gif'
-          : ext === 'webp' ? 'image/webp'
-          : ext === 'svg' ? 'image/svg+xml'
-          : 'image/jpeg';
-        dataUrl = await fileToBase64(new Blob([bytes.buffer as ArrayBuffer], { type: mime }));
-      }
-    }
-
+    const dataUrl = await imageDataUrlByHref(zip, page.href, source, manifest);
     if (dataUrl && !seen.has(dataUrl)) {
       seen.add(dataUrl);
       imageUrls.push(dataUrl);
     }
   }
+
   return imageUrls;
 }
 
@@ -200,7 +218,7 @@ export async function parseEpub(file: File): Promise<{
   title: string;
   author: string;
   coverUrl?: string;
-  chapters: { title: string; paragraphs: string[]; images?: string[] }[];
+  chapters: { title: string; paragraphs: string[]; images?: string[]; standaloneImagePage?: boolean }[];
 }> {
   const zip = await JSZip.loadAsync(await file.arrayBuffer());
   const containerXml = await findZipFile(zip, 'META-INF/container.xml')?.async('text');
@@ -263,7 +281,7 @@ export async function parseEpub(file: File): Promise<{
   const spineIds = Array.from(opfDoc.querySelectorAll('spine itemref'))
     .map(node => node.getAttribute('idref'))
     .filter((id): id is string => Boolean(id));
-  const chapters: { title: string; paragraphs: string[]; images?: string[] }[] = [];
+  const chapters: { title: string; paragraphs: string[]; images?: string[]; standaloneImagePage?: boolean }[] = [];
   let chapterNum = 0;
 
   for (const id of spineIds) {
@@ -275,22 +293,44 @@ export async function parseEpub(file: File): Promise<{
       if (!htmlText) continue;
       const paragraphs = extractTextFromHtml(htmlText);
       const images = await extractImagesFromHtml(zip, item, manifest);
+
+      // Do not throw away XHTML spine items that contain only an image.
+      // Publishers commonly use these for title pages, maps and full-page plates.
       if (!paragraphs.length && !images.length) continue;
-      if (paragraphs.length && isNavigationLikeSpineItem(item, htmlText, paragraphs)) continue;
+      if (isNavigationLikeSpineItem(item, htmlText, paragraphs)) continue;
+
       const headingText = parseHtml(htmlText).querySelector('h1, h2, h3')?.textContent?.trim();
       const heading = normalizeText(headingText || '');
       const previous = chapters[chapters.length - 1];
 
+      const isStandaloneImagePage = images.length > 0 && paragraphs.length === 0;
+
+      if (isStandaloneImagePage) {
+        // Keep the spine order exactly: this is its own reader page, not part of
+        // the previous prose chapter. Empty title is intentional.
+        chapters.push({
+          title: heading,
+          paragraphs: [],
+          images,
+          standaloneImagePage: true,
+        });
+        continue;
+      }
+
       // EPUB spine items are files, not necessarily chapters. Many publishers
-      // split one visible chapter across several XHTML files. Treating every
-      // spine item as a chapter forced a hard page break at each file boundary,
-      // which produced pages with only a few short paragraphs and a huge blank
-      // lower half. A file with no heading is therefore a continuation of the
-      // current chapter; a repeated heading is also a continuation.
+      // split one visible chapter across several XHTML files. A text-only file
+      // without a heading can therefore continue the current chapter.
       const repeatsPreviousHeading = Boolean(
-        previous && heading && previous.title.trim().toLowerCase() === heading.toLowerCase(),
+        previous &&
+        !previous.standaloneImagePage &&
+        heading &&
+        previous.title.trim().toLowerCase() === heading.toLowerCase(),
       );
-      const isContinuation = Boolean(previous && (!heading || repeatsPreviousHeading));
+      const isContinuation = Boolean(
+        previous &&
+        !previous.standaloneImagePage &&
+        (!heading || repeatsPreviousHeading),
+      );
 
       if (isContinuation) {
         previous.paragraphs.push(...paragraphs);
