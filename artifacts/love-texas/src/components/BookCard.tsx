@@ -33,7 +33,7 @@ export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
     <motion.div
       whileHover={{ y: -4 }}
       transition={{ duration: 0.2 }}
-      className="group flex w-full min-w-0 flex-col rounded-[16px] overflow-hidden bg-white/28 backdrop-blur-[18px] backdrop-saturate-[135%] shadow-[0_8px_24px_rgba(57,35,26,.10),inset_0_1px_0_rgba(255,255,255,.55)] hover:shadow-[0_14px_32px_rgba(57,35,26,.16),inset_0_1px_0_rgba(255,255,255,.65)] border border-white/55 transition-shadow cursor-pointer text-black"
+      className="group flex w-full min-w-0 flex-col rounded-[16px] overflow-hidden bg-white/16 backdrop-blur-[8px] backdrop-saturate-[135%] shadow-[0_8px_24px_rgba(57,35,26,.10),inset_0_1px_0_rgba(255,255,255,.55)] hover:shadow-[0_14px_32px_rgba(57,35,26,.16),inset_0_1px_0_rgba(255,255,255,.65)] border border-white/55 transition-shadow cursor-pointer text-black"
       data-testid={`card-book-${book.id}`}
       role="link"
       tabIndex={0}
@@ -85,7 +85,7 @@ export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
       </div>
 
       {/* Info */}
-      <div className="p-2.5 flex flex-col gap-1 bg-white/10 text-black">
+      <div className="p-2.5 flex flex-col gap-1 bg-white/5 text-black">
         <h3 data-testid={`text-book-title-${book.id}`} className="font-editorial font-semibold text-[15px] text-black line-clamp-1" title={book.title}>
           {book.title}
         </h3>
