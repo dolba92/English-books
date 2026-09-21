@@ -37,7 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <img
               src="/logo-main.png"
               alt="English Books"
-              className="w-[150px] h-[150px] rounded-[28px] object-cover drop-shadow-[0_8px_16px_rgba(0,0,0,.18)]"
+              className="block w-[135px] h-[135px] rounded-[26px] object-cover object-center drop-shadow-[0_8px_16px_rgba(0,0,0,.18)]"
             />
           </div>
 
