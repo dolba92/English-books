@@ -10,7 +10,7 @@ function parseHtml(text: string): Document {
 
 function archivePath(base: string, href: string): string {
   const cleanHref = href.split('#')[0].split('?')[0];
-  const parts = `${base}${decodeURIComponent(cleanHref)}`.split('/');
+  const parts = `${base}${safeDecode(cleanHref)}`.split('/');
   const result: string[] = [];
   for (const part of parts) {
     if (!part || part === '.') continue;
@@ -20,13 +20,28 @@ function archivePath(base: string, href: string): string {
   return result.join('/');
 }
 
+function safeDecode(value: string): string {
+  try { return decodeURIComponent(value); } catch { return value; }
+}
+
+function normalizeArchiveKey(value: string): string {
+  return safeDecode(value)
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/\/+/g, '/')
+    .toLowerCase();
+}
+
 function findZipFile(zip: JSZip, path: string): JSZip.JSZipObject | undefined {
-  const candidates = [path, decodeURIComponent(path), encodeURI(path)];
+  const clean = path.replace(/^\/+/, '');
+  const candidates = [clean, safeDecode(clean)];
   for (const candidate of candidates) {
     const file = zip.file(candidate);
     if (file) return file;
   }
-  return undefined;
+
+  const wanted = normalizeArchiveKey(clean);
+  return Object.values(zip.files).find(file => !file.dir && normalizeArchiveKey(file.name) === wanted);
 }
 
 function normalizeText(value: string): string {
@@ -128,14 +143,55 @@ async function extractImagesFromHtml(zip: JSZip, page: ManifestItem, manifest: M
   if (!file) return [];
   const doc = parseHtml(await file.async('text'));
   const imageUrls: string[] = [];
-  for (const node of Array.from(doc.querySelectorAll('img'))) {
-    const source = node.getAttribute('src');
-    if (!source) continue;
+  const seen = new Set<string>();
+
+  const sources: string[] = [];
+  doc.querySelectorAll('img').forEach(node => {
+    const src = node.getAttribute('src');
+    if (src) sources.push(src);
+    const srcset = node.getAttribute('srcset');
+    if (srcset) {
+      srcset.split(',').forEach(part => {
+        const candidate = part.trim().split(/\s+/)[0];
+        if (candidate) sources.push(candidate);
+      });
+    }
+  });
+  doc.querySelectorAll('image').forEach(node => {
+    const src = node.getAttribute('href') || node.getAttribute('xlink:href');
+    if (src) sources.push(src);
+  });
+
+  for (const source of sources) {
+    if (/^data:image\//i.test(source)) {
+      if (!seen.has(source)) { seen.add(source); imageUrls.push(source); }
+      continue;
+    }
+
     const imageHref = archivePath(page.href.slice(0, page.href.lastIndexOf('/') + 1), source);
-    const imageItem = manifest.find(item => item.href === imageHref || decodeURIComponent(item.href) === imageHref);
-    if (!imageItem?.mediaType.startsWith('image/')) continue;
-    const dataUrl = await imageDataUrl(zip, imageItem);
-    if (dataUrl) imageUrls.push(dataUrl);
+    const imageItem = manifest.find(item => normalizeArchiveKey(item.href) === normalizeArchiveKey(imageHref));
+    let dataUrl: string | undefined;
+
+    if (imageItem?.mediaType.startsWith('image/')) {
+      dataUrl = await imageDataUrl(zip, imageItem);
+    } else {
+      const imageFile = findZipFile(zip, imageHref);
+      if (imageFile) {
+        const bytes = await imageFile.async('uint8array');
+        const ext = imageHref.split('.').pop()?.toLowerCase();
+        const mime = ext === 'png' ? 'image/png'
+          : ext === 'gif' ? 'image/gif'
+          : ext === 'webp' ? 'image/webp'
+          : ext === 'svg' ? 'image/svg+xml'
+          : 'image/jpeg';
+        dataUrl = await fileToBase64(new Blob([bytes.buffer as ArrayBuffer], { type: mime }));
+      }
+    }
+
+    if (dataUrl && !seen.has(dataUrl)) {
+      seen.add(dataUrl);
+      imageUrls.push(dataUrl);
+    }
   }
   return imageUrls;
 }
@@ -218,9 +274,9 @@ export async function parseEpub(file: File): Promise<{
       const htmlText = await htmlFile?.async('text');
       if (!htmlText) continue;
       const paragraphs = extractTextFromHtml(htmlText);
-      if (!paragraphs.length) continue;
-      if (isNavigationLikeSpineItem(item, htmlText, paragraphs)) continue;
       const images = await extractImagesFromHtml(zip, item, manifest);
+      if (!paragraphs.length && !images.length) continue;
+      if (paragraphs.length && isNavigationLikeSpineItem(item, htmlText, paragraphs)) continue;
       const headingText = parseHtml(htmlText).querySelector('h1, h2, h3')?.textContent?.trim();
       const heading = normalizeText(headingText || '');
       const previous = chapters[chapters.length - 1];
