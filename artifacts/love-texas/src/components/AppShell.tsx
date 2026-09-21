@@ -33,11 +33,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     >
       {!isReader && (
         <nav className="md:w-[232px] bg-sidebar border-r border-sidebar-border flex md:flex-col px-3 py-3 md:p-4 md:sticky md:top-0 md:h-[100dvh] z-20 shrink-0 shadow-[4px_0_24px_rgba(57,35,26,.18)]">
-          <div className="hidden md:flex items-center justify-center px-1 py-3 mb-7">
+          <div className="hidden md:flex items-center justify-center px-1 pt-3 pb-5 mb-2">
             <img
               src="/logo-main.png"
               alt="English Books"
-              className="block w-[135px] h-[135px] rounded-[26px] object-cover object-center drop-shadow-[0_8px_16px_rgba(0,0,0,.18)]"
+              className="block w-[135px] h-[135px] object-cover rounded-[26px] shadow-[0_8px_20px_rgba(0,0,0,.18)] -translate-x-[6px] translate-y-[2px]"
             />
           </div>
 
