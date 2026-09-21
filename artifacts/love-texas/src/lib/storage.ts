@@ -4,6 +4,8 @@ export interface BookChapter {
   title: string;
   paragraphs: string[];
   images?: string[];
+  /** True when this EPUB spine item is a standalone image page (title page, map, plate, etc.). */
+  standaloneImagePage?: boolean;
 }
 
 export interface Book {
