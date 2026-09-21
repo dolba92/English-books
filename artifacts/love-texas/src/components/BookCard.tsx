@@ -33,7 +33,7 @@ export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
     <motion.div
       whileHover={{ y: -4 }}
       transition={{ duration: 0.2 }}
-      className="group flex w-full min-w-0 flex-col rounded-[16px] overflow-hidden bg-white/28 backdrop-blur-[18px] backdrop-saturate-[135%] shadow-[0_8px_24px_rgba(57,35,26,.10),inset_0_1px_0_rgba(255,255,255,.55)] hover:shadow-[0_14px_32px_rgba(57,35,26,.16),inset_0_1px_0_rgba(255,255,255,.65)] border border-white/55 transition-shadow cursor-pointer"
+      className="group flex w-full min-w-0 flex-col rounded-[16px] overflow-hidden bg-white/28 backdrop-blur-[18px] backdrop-saturate-[135%] shadow-[0_8px_24px_rgba(57,35,26,.10),inset_0_1px_0_rgba(255,255,255,.55)] hover:shadow-[0_14px_32px_rgba(57,35,26,.16),inset_0_1px_0_rgba(255,255,255,.65)] border border-white/55 transition-shadow cursor-pointer text-black"
       data-testid={`card-book-${book.id}`}
       role="link"
       tabIndex={0}
@@ -51,9 +51,9 @@ export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
             />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center bg-[radial-gradient(circle_at_28%_18%,hsl(var(--accent)/.5),transparent_30%),linear-gradient(145deg,hsl(var(--secondary)),hsl(var(--primary)/.2))] p-5 text-center">
-              <BookOpen size={34} className="text-primary/75 mb-4" />
-              <span className="font-editorial text-lg font-semibold text-foreground/80 leading-tight line-clamp-3">{book.title}</span>
-              <span className="text-[11px] font-medium text-foreground/60 mt-3 line-clamp-2">{book.author}</span>
+              <BookOpen size={34} className="text-black/75 mb-4" />
+              <span className="font-editorial text-lg font-semibold text-black/85 leading-tight line-clamp-3">{book.title}</span>
+              <span className="text-[11px] font-medium text-black/65 mt-3 line-clamp-2">{book.author}</span>
             </div>
           )}
 
@@ -65,11 +65,11 @@ export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
           </div>
 
           {/* Hover overlay */}
-          <div className="absolute inset-0 bg-foreground/35 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center justify-center gap-2" onClick={event => event.stopPropagation()}>
+          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center justify-center gap-2" onClick={event => event.stopPropagation()}>
             <Link
               href={`/reader/${book.id}`}
               data-testid={`btn-read-${book.id}`}
-              className="w-10 h-10 rounded-full bg-white/70 backdrop-blur-xl text-primary flex items-center justify-center shadow hover:scale-110 transition-transform border border-white/60"
+              className="w-10 h-10 rounded-full bg-white/70 backdrop-blur-xl text-black flex items-center justify-center shadow hover:scale-110 transition-transform border border-white/60"
             >
               <Play size={18} className="ml-0.5" fill="currentColor" />
             </Link>
@@ -85,14 +85,14 @@ export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
       </div>
 
       {/* Info */}
-      <div className="p-2.5 flex flex-col gap-1 bg-white/10">
-        <h3 data-testid={`text-book-title-${book.id}`} className="font-editorial font-semibold text-[15px] text-foreground line-clamp-1" title={book.title}>
+      <div className="p-2.5 flex flex-col gap-1 bg-white/10 text-black">
+        <h3 data-testid={`text-book-title-${book.id}`} className="font-editorial font-semibold text-[15px] text-black line-clamp-1" title={book.title}>
           {book.title}
         </h3>
-        <p data-testid={`text-book-author-${book.id}`} className="text-xs text-muted-foreground line-clamp-1">{book.author}</p>
+        <p data-testid={`text-book-author-${book.id}`} className="text-xs text-black/70 line-clamp-1">{book.author}</p>
 
         <div className="mt-2">
-          <div className="flex justify-between text-[11px] text-muted-foreground mb-1.5">
+          <div className="flex justify-between text-[11px] text-black/65 mb-1.5">
             <span className="flex items-center gap-1"><FileText size={12} />{book.totalPages} страниц</span>
             <span data-testid={`text-book-progress-${book.id}`}>{Math.round(progress)}%</span>
           </div>
@@ -103,7 +103,7 @@ export function BookCard({ book, progress = 0, onDelete }: BookCardProps) {
             />
           </div>
         </div>
-        <Link onClick={event => event.stopPropagation()} href={`/reader/${book.id}`} data-testid={`link-open-book-${book.id}`} className="mt-2 text-xs font-semibold text-primary flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+        <Link onClick={event => event.stopPropagation()} href={`/reader/${book.id}`} data-testid={`link-open-book-${book.id}`} className="mt-2 text-xs font-semibold text-black flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
           {progress > 0 ? 'Продолжить чтение' : 'Открыть книгу'} <ArrowUpRight size={13} />
         </Link>
       </div>
