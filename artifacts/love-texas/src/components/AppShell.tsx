@@ -3,7 +3,6 @@ import { Link, useLocation } from 'wouter';
 import { BookOpen, BookMarked, BarChart2, Settings } from 'lucide-react';
 import { getTheme, applyTheme } from '@/lib/theme';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
-import logoUrl from '@/assets/logo-main.png';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -36,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <nav className="md:w-[232px] bg-sidebar border-r border-sidebar-border flex md:flex-col px-3 py-3 md:p-4 md:sticky md:top-0 md:h-[100dvh] z-20 shrink-0 shadow-[4px_0_24px_rgba(57,35,26,.18)]">
           <div className="hidden md:flex items-center justify-center px-1 py-3 mb-7">
             <img
-              src={logoUrl}
+              src="/logo-main.png"
               alt="English Books"
               className="w-[150px] h-[150px] rounded-[28px] object-cover drop-shadow-[0_8px_16px_rgba(0,0,0,.18)]"
             />
