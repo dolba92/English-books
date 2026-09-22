@@ -7,8 +7,11 @@ import { Database, Moon, Palette, RotateCcw, Sun, Trash2 } from 'lucide-react';
 
 const themes: { id: Theme; name: string; description: string; swatch: string }[] = [
   { id: 'light', name: 'Бумага', description: 'Тёплая книжная страница', swatch: 'bg-[#f4ead8]' },
-  { id: 'pink', name: 'Розовая', description: 'Мягкий пудровый фон', swatch: 'bg-[#f0c8d5]' },
-  { id: 'cream', name: 'Шоколадная', description: 'Глубокие кофейные тона', swatch: 'bg-[#3a2821]' },
+  { id: 'pink', name: 'Пудровая', description: 'Спокойный пыльно-розовый фон', swatch: 'bg-[#ead8dc]' },
+  { id: 'cream', name: 'Молочный шоколад', description: 'Мягкие карамельно-кофейные тона', swatch: 'bg-[#b98268]' },
+  { id: 'latte', name: 'Латте', description: 'Светлый кофе с молоком', swatch: 'bg-[#dfc7ad]' },
+  { id: 'sage', name: 'Шалфей', description: 'Спокойные природные оттенки', swatch: 'bg-[#cbd2bd]' },
+  { id: 'lavender', name: 'Лавандовая', description: 'Мягкий прохладный лиловый', swatch: 'bg-[#d8d0e2]' },
   { id: 'dark', name: 'Ночная', description: 'Спокойное чтение в темноте', swatch: 'bg-[#17151a]' },
 ];
 
@@ -20,14 +23,17 @@ export function SettingsPage() {
   const selectTheme = (next: Theme) => {
     setTheme(next);
     applyTheme(next);
-    toast({ title: `Тема «${themes.find(item => item.id === next)?.name}» включена`, duration: 1600 });
+    toast({
+      title: `Тема «${themes.find(item => item.id === next)?.name}» включена`,
+      duration: 1600,
+    });
   };
 
   const resetReader = () => {
     localStorage.removeItem('lt-reader-settings');
     updateSettings({
       fontSize: 17,
-       pageWidth: 'wide',
+      pageWidth: 'wide',
       fontFamily: 'Source Serif 4',
       lineHeight: 1.65,
       paragraphSpacing: 0.8,
@@ -37,7 +43,7 @@ export function SettingsPage() {
       autoSave: true,
       fontWeight: 400,
       firstLineIndent: true,
-       pageMargin: 'compact',
+      pageMargin: 'compact',
       showIllustrations: true,
       readerTheme: 'default',
     });
@@ -72,6 +78,7 @@ export function SettingsPage() {
             <p>Выберите настроение библиотеки и страниц приложения.</p>
           </div>
         </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {themes.map(item => (
             <button
