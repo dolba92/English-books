@@ -527,10 +527,15 @@ function ReaderSettingsPanel({ onClose }: { onClose: () => void }) {
   const { settings, updateSettings } = useReaderSettings();
   const set = (patch: Parameters<typeof updateSettings>[0]) => updateSettings(patch);
   const themes = [
-    { value: 'default' as const, label: 'Текущая' },
-    { value: 'paper' as const, label: 'Бумага' },
-    { value: 'sepia' as const, label: 'Сепия' },
-    { value: 'night' as const, label: 'Ночь' },
+    { value: 'milk' as const, label: 'Молочная', bg: '#f7f3ec', text: '#3f352f' },
+    { value: 'cream' as const, label: 'Кремовая', bg: '#f2e8d8', text: '#493a31' },
+    { value: 'powder' as const, label: 'Пудра', bg: '#f1e3e5', text: '#49383a' },
+    { value: 'sage' as const, label: 'Шалфей', bg: '#e7ebdf', text: '#374038' },
+    { value: 'mist' as const, label: 'Туман', bg: '#e8edf0', text: '#344047' },
+    { value: 'lavender' as const, label: 'Лаванда', bg: '#ece8f1', text: '#40394a' },
+    { value: 'latte' as const, label: 'Латте', bg: '#e9dccd', text: '#493a31' },
+    { value: 'night' as const, label: 'Ночь', bg: '#2b2725', text: '#f1e9df' },
+    { value: 'custom' as const, label: 'Своя', bg: settings.customBackgroundColor, text: settings.customTextColor },
   ];
 
   return (
@@ -596,9 +601,50 @@ function ReaderSettingsPanel({ onClose }: { onClose: () => void }) {
         </label>
         <div className="reader-setting-control">
           <span>Тема Reader</span>
-          <div className="grid grid-cols-2 gap-2">
-            {themes.map(item => <button type="button" key={item.value} onClick={() => set({ readerTheme: item.value })} className={`reader-choice ${settings.readerTheme === item.value ? 'reader-choice-active' : ''}`}>{item.label}</button>)}
+          <div className="grid grid-cols-3 gap-2">
+            {themes.map(item => (
+              <button
+                type="button"
+                key={item.value}
+                onClick={() => set({ readerTheme: item.value })}
+                className={`reader-choice min-h-[72px] flex flex-col items-center justify-center gap-1.5 ${settings.readerTheme === item.value ? 'reader-choice-active' : ''}`}
+                title={item.label}
+              >
+                <span
+                  className="w-full h-8 rounded-lg border border-black/10 flex items-center justify-center font-serif italic text-base shadow-sm"
+                  style={{ backgroundColor: item.bg, color: item.text }}
+                >
+                  Aa
+                </span>
+                <span className="text-[11px] leading-none">{item.label}</span>
+              </button>
+            ))}
           </div>
+
+          {settings.readerTheme === 'custom' && (
+            <div className="mt-3 rounded-xl border border-border bg-muted/30 p-3 grid grid-cols-2 gap-3">
+              <label className="flex items-center justify-between gap-2 text-xs font-medium">
+                <span>Фон</span>
+                <input
+                  type="color"
+                  value={settings.customBackgroundColor}
+                  onChange={event => set({ customBackgroundColor: event.target.value })}
+                  className="h-9 w-12 cursor-pointer rounded border border-border bg-transparent p-0.5"
+                  aria-label="Цвет фона Reader"
+                />
+              </label>
+              <label className="flex items-center justify-between gap-2 text-xs font-medium">
+                <span>Текст</span>
+                <input
+                  type="color"
+                  value={settings.customTextColor}
+                  onChange={event => set({ customTextColor: event.target.value })}
+                  className="h-9 w-12 cursor-pointer rounded border border-border bg-transparent p-0.5"
+                  aria-label="Цвет текста Reader"
+                />
+              </label>
+            </div>
+          )}
         </div>
       </div>
     </motion.aside>
@@ -611,7 +657,6 @@ export function ReaderPage() {
   const id = parseInt(params.id || '0', 10);
   const { settings } = useReaderSettings();
   const { toast } = useToast();
-  const customBackgroundColor = settings.backgroundColor === '#f0c8d5' ? undefined : settings.backgroundColor;
 
   const [book, setBook] = useState<Book | null>(null);
   const [pages, setPages] = useState<PageData[]>([]);
@@ -1076,27 +1121,27 @@ export function ReaderPage() {
   const isMobile = viewportWidth < 640;
   const readerFontSize = settings.fontSize;
   const readerLineHeight = settings.lineHeight;
-  const readerSurface = settings.readerTheme === 'paper'
-    ? '#f4ead8'
-    : settings.readerTheme === 'sepia'
-      ? '#ead9bd'
-      : settings.readerTheme === 'night'
-        ? '#2b2725'
-        : (customBackgroundColor || '#f0c8d5');
-  const readerTextColor = settings.readerTheme === 'night'
-    ? '#f1e9df'
-    : settings.readerTheme === 'paper'
-      ? '#493a2e'
-      : settings.readerTheme === 'sepia'
-        ? '#493126'
-        : settings.textColor;
+  const readerThemes = {
+    milk: { bg: '#f7f3ec', text: '#3f352f', panel: '#fbf8f2', muted: '#74675f', border: 'rgba(74,61,53,.16)', mutedSurface: 'rgba(255,255,255,.50)' },
+    cream: { bg: '#f2e8d8', text: '#493a31', panel: '#f8f0e4', muted: '#78665a', border: 'rgba(82,62,49,.16)', mutedSurface: 'rgba(255,255,255,.42)' },
+    powder: { bg: '#f1e3e5', text: '#49383a', panel: '#f8eff0', muted: '#7a6266', border: 'rgba(85,58,64,.15)', mutedSurface: 'rgba(255,255,255,.42)' },
+    sage: { bg: '#e7ebdf', text: '#374038', panel: '#f0f3ea', muted: '#667066', border: 'rgba(55,70,57,.15)', mutedSurface: 'rgba(255,255,255,.40)' },
+    mist: { bg: '#e8edf0', text: '#344047', panel: '#f1f4f6', muted: '#617078', border: 'rgba(50,67,76,.15)', mutedSurface: 'rgba(255,255,255,.42)' },
+    lavender: { bg: '#ece8f1', text: '#40394a', panel: '#f4f1f7', muted: '#6f6679', border: 'rgba(66,56,78,.15)', mutedSurface: 'rgba(255,255,255,.42)' },
+    latte: { bg: '#e9dccd', text: '#493a31', panel: '#f2e8dc', muted: '#756458', border: 'rgba(80,61,49,.16)', mutedSurface: 'rgba(255,255,255,.38)' },
+    night: { bg: '#2b2725', text: '#f1e9df', panel: '#393331', muted: '#c8bcb2', border: 'rgba(245,238,231,.18)', mutedSurface: '#46403d' },
+    custom: { bg: settings.customBackgroundColor, text: settings.customTextColor, panel: settings.customBackgroundColor, muted: settings.customTextColor, border: 'rgba(91,56,43,.18)', mutedSurface: 'rgba(255,255,255,.18)' },
+  } as const;
+  const activeReaderTheme = readerThemes[settings.readerTheme] ?? readerThemes.milk;
+  const readerSurface = activeReaderTheme.bg;
+  const readerTextColor = activeReaderTheme.text;
   const readerThemeStyle = {
     '--reader-bg': readerSurface,
     '--reader-text': readerTextColor,
-    '--reader-panel': settings.readerTheme === 'night' ? '#393331' : '#fffaf7',
-    '--reader-muted': settings.readerTheme === 'night' ? '#c8bcb2' : '#765c54',
-    '--reader-border': settings.readerTheme === 'night' ? 'rgba(245,238,231,.18)' : 'rgba(91,56,43,.16)',
-    '--reader-muted-surface': settings.readerTheme === 'night' ? '#46403d' : 'rgba(255,255,255,.48)',
+    '--reader-panel': activeReaderTheme.panel,
+    '--reader-muted': activeReaderTheme.muted,
+    '--reader-border': activeReaderTheme.border,
+    '--reader-muted-surface': activeReaderTheme.mutedSurface,
   } as React.CSSProperties;
   const marginClass = settings.pageMargin === 'compact'
     ? 'px-3 sm:px-5 md:px-6'
