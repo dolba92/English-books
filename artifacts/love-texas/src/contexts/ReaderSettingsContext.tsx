@@ -1,5 +1,16 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+export type ReaderTheme =
+  | 'milk'
+  | 'cream'
+  | 'powder'
+  | 'sage'
+  | 'mist'
+  | 'lavender'
+  | 'latte'
+  | 'night'
+  | 'custom';
+
 export interface ReaderSettings {
   fontSize: number; // 12-36
   pageWidth: 'narrow' | 'medium' | 'wide';
@@ -7,14 +18,16 @@ export interface ReaderSettings {
   lineHeight: number; // 1.3-2.6
   paragraphSpacing: number; // em
   textAlign: 'left' | 'justify';
-  textColor: string; // reading text color
-  backgroundColor: string; // app and reader background
+  textColor: string; // legacy reading text color
+  backgroundColor: string; // legacy app and reader background
   autoSave: boolean;
   fontWeight: 400 | 500 | 600;
   firstLineIndent: boolean;
   pageMargin: 'compact' | 'comfortable' | 'wide';
   showIllustrations: boolean;
-  readerTheme: 'default' | 'paper' | 'sepia' | 'night';
+  readerTheme: ReaderTheme;
+  customBackgroundColor: string;
+  customTextColor: string;
 }
 
 const defaultSettings: ReaderSettings = {
@@ -31,7 +44,9 @@ const defaultSettings: ReaderSettings = {
   firstLineIndent: true,
   pageMargin: 'compact',
   showIllustrations: true,
-  readerTheme: 'default',
+  readerTheme: 'milk',
+  customBackgroundColor: '#f7f3ec',
+  customTextColor: '#3f352f',
 };
 
 interface SettingsContextType {
@@ -41,26 +56,41 @@ interface SettingsContextType {
 
 const ReaderSettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
+const validThemes: ReaderTheme[] = [
+  'milk', 'cream', 'powder', 'sage', 'mist', 'lavender', 'latte', 'night', 'custom',
+];
+
+function migrateReaderTheme(value: unknown): ReaderTheme {
+  if (validThemes.includes(value as ReaderTheme)) return value as ReaderTheme;
+  if (value === 'night') return 'night';
+  if (value === 'paper') return 'cream';
+  if (value === 'sepia') return 'latte';
+  if (value === 'default') return 'powder';
+  return 'milk';
+}
+
 export function ReaderSettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<ReaderSettings>(() => {
     const saved = localStorage.getItem('lt-reader-settings');
     if (saved) {
       try {
-          const parsed = JSON.parse(saved) as Partial<ReaderSettings>;
-          const isPreviousDefault = parsed.fontSize === 17
-            && parsed.pageWidth === 'medium'
-            && parsed.pageMargin === 'comfortable'
-            && parsed.fontFamily === 'Source Serif 4'
-            && parsed.lineHeight === 1.65
-            && parsed.paragraphSpacing === 0.8
-            && parsed.textAlign === 'justify'
-            && parsed.readerTheme === 'default';
-          return {
-            ...defaultSettings,
-            ...parsed,
-            ...(isPreviousDefault ? { pageWidth: 'wide', pageMargin: 'compact' } : {}),
-          };
-      } catch (e) {
+        const parsed = JSON.parse(saved) as Partial<ReaderSettings>;
+        const isPreviousDefault = parsed.fontSize === 17
+          && parsed.pageWidth === 'medium'
+          && parsed.pageMargin === 'comfortable'
+          && parsed.fontFamily === 'Source Serif 4'
+          && parsed.lineHeight === 1.65
+          && parsed.paragraphSpacing === 0.8
+          && parsed.textAlign === 'justify'
+          && parsed.readerTheme === ('default' as ReaderTheme);
+
+        return {
+          ...defaultSettings,
+          ...parsed,
+          readerTheme: migrateReaderTheme(parsed.readerTheme),
+          ...(isPreviousDefault ? { pageWidth: 'wide', pageMargin: 'compact' } : {}),
+        };
+      } catch {
         return defaultSettings;
       }
     }
@@ -85,7 +115,7 @@ export function ReaderSettingsProvider({ children }: { children: React.ReactNode
 export function useReaderSettings() {
   const context = useContext(ReaderSettingsContext);
   if (!context) {
-    throw new Error("useReaderSettings must be used within a ReaderSettingsProvider");
+    throw new Error('useReaderSettings must be used within a ReaderSettingsProvider');
   }
   return context;
 }
