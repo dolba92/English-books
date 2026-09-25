@@ -299,8 +299,24 @@ export async function parseEpub(file: File): Promise<{
       if (!paragraphs.length && !images.length) continue;
       if (isNavigationLikeSpineItem(item, htmlText, paragraphs)) continue;
 
-      const headingText = parseHtml(htmlText).querySelector('h1, h2, h3')?.textContent?.trim();
-      const heading = normalizeText(headingText || '');
+      const pageDoc = parseHtml(htmlText);
+
+      // Chapter headings are not always real <h1>/<h2>/<h3> elements.
+      // Some publishers use paragraph classes such as <p class="CN">1</p>
+      // for the visible chapter number.
+      const semanticHeading = pageDoc.querySelector('h1, h2, h3')?.textContent?.trim();
+      const publisherHeading = Array.from(pageDoc.querySelectorAll('p, div'))
+        .find(node => {
+          const className = (node.getAttribute('class') || '').trim();
+          if (!className) return false;
+          const classes = className.split(/\\s+/);
+          return classes.some(cls =>
+            /^(cn|ct|chapter[-_ ]?(number|num|title|head|heading)|chaptertitle|chapternumber|chapterhead)$/i.test(cls)
+          );
+        })
+        ?.textContent?.trim();
+
+      const heading = normalizeText(semanticHeading || publisherHeading || '');
       const previous = chapters[chapters.length - 1];
 
       const isStandaloneImagePage = images.length > 0 && paragraphs.length === 0;
