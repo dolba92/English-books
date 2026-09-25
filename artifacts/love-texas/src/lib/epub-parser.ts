@@ -64,32 +64,40 @@ function isNavigationLikeSpineItem(item: ManifestItem, htmlText: string, paragra
   const properties = item.properties.toLowerCase().split(/\s+/).filter(Boolean);
   const href = item.href.toLowerCase();
 
-  // EPUB3 navigation documents and the common EPUB2/converted TOC filenames
-  // are metadata/navigation, not prose that should appear in the reader.
   if (properties.includes('nav')) return true;
   if (/(^|\/)(toc|contents?|navigation|nav|landmarks?)([-_.\/]|$)/i.test(href)) return true;
 
   const doc = parseHtml(htmlText);
-  if (doc.querySelector('nav[epub\\:type="toc"], nav[role="doc-toc"], nav#toc, nav.toc')) return true;
 
+  // Do not use namespace-sensitive CSS selectors here: a selector error must
+  // never make the parser silently discard an entire XHTML chapter.
+  const navNodes = Array.from(doc.getElementsByTagName('nav'));
+  if (navNodes.some(node => {
+    const epubType = node.getAttribute('epub:type') || node.getAttribute('type') || '';
+    const role = node.getAttribute('role') || '';
+    const id = node.getAttribute('id') || '';
+    const className = node.getAttribute('class') || '';
+    return /\btoc\b/i.test(epubType)
+      || role.toLowerCase() === 'doc-toc'
+      || /\btoc\b/i.test(id)
+      || /\btoc\b/i.test(className);
+  })) return true;
+
+  // Count only actual hyperlinks. Many EPUBs contain hundreds of empty
+  // <a id="..."> page anchors inside ordinary prose; those are not navigation.
+  const links = Array.from(doc.getElementsByTagName('a'))
+    .filter(link => Boolean(link.getAttribute('href')));
   const bodyText = normalizeText(doc.body?.textContent || '');
-  const links = Array.from(doc.querySelectorAll('a'));
   const linkText = normalizeText(links.map(link => link.textContent || '').join(' '));
-  const linkChars = linkText.length;
-  const bodyChars = Math.max(1, bodyText.length);
-  const linkDensity = linkChars / bodyChars;
+  const linkDensity = linkText.length / Math.max(1, bodyText.length);
 
   const shortEntries = paragraphs.filter(p => p.length <= 90);
   const tocWords = paragraphs.filter(p =>
     /^(chapter|part|prologue|epilogue|acknowledg(e)?ments?|about the (author|publisher)|contents?)\b/i.test(p.trim()),
   );
 
-  // Some publishers put a plain XHTML contents page in the spine without
-  // marking it as `nav`. High link density plus many short chapter-like rows is
-  // a strong signal that this is navigation rather than book prose.
   if (links.length >= 4 && linkDensity >= 0.55 && shortEntries.length >= 4) return true;
   if (links.length >= 3 && tocWords.length >= 3 && linkDensity >= 0.35) return true;
-
   return false;
 }
 
@@ -309,7 +317,7 @@ export async function parseEpub(file: File): Promise<{
         .find(node => {
           const className = (node.getAttribute('class') || '').trim();
           if (!className) return false;
-          const classes = className.split(/\\s+/);
+          const classes = className.split(/\s+/);
           return classes.some(cls =>
             /^(cn|ct|chapter[-_ ]?(number|num|title|head|heading)|chaptertitle|chapternumber|chapterhead)$/i.test(cls)
           );
@@ -356,8 +364,8 @@ export async function parseEpub(file: File): Promise<{
         const chapterTitle = heading || `Chapter ${chapterNum}`;
         chapters.push({ title: chapterTitle, paragraphs, images });
       }
-    } catch {
-      // Skip a broken spine item and continue with the readable chapters.
+    } catch (error) {
+      console.warn('[EPUB] Skipped spine item:', item.href, error);
     }
   }
 
