@@ -676,6 +676,7 @@ export function ReaderPage() {
   const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight);
 
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const [lastWordChoice, setLastWordChoice] = useState<{ word: string; sentence: string; x: number; y: number } | null>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -1035,17 +1036,16 @@ export function ReaderPage() {
     hideTimeoutRef.current = setTimeout(() => setTooltip(null), 300);
   };
 
-  const handleWordClick = async (e: React.MouseEvent<HTMLSpanElement>, rawWord: string, sentence: string) => {
+  const openWordTranslation = async (rawWord: string, sentence: string, x: number, y: number) => {
     const word = rawWord.replace(/[^a-zA-Z'-]/g, '').toLowerCase().trim();
     if (!word || word.length < 2) return;
     clearTimeout(hoverTimeoutRef.current);
     clearTimeout(hideTimeoutRef.current);
-    const rect = e.currentTarget.getBoundingClientRect();
     const preferredPos = inferPreferredPos(sentence, rawWord);
     setTooltip({
       word,
-      x: rect.left + rect.width / 2,
-      y: rect.top - 8,
+      x,
+      y,
       info: null,
       loading: true,
       sentence,
@@ -1053,6 +1053,12 @@ export function ReaderPage() {
     });
     const info = await lookupWord(word, preferredPos);
     setTooltip(previous => previous?.word === word ? { ...previous, info, loading: false } : previous);
+  };
+
+  const handleWordClick = (e: React.MouseEvent<HTMLSpanElement>, rawWord: string, sentence: string) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setLastWordChoice(null);
+    void openWordTranslation(rawWord, sentence, rect.left + rect.width / 2, rect.top - 8);
   };
 
   const handleAddWord = async (payload: {
@@ -1250,7 +1256,7 @@ export function ReaderPage() {
                 <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
                   className="mb-5 flex items-center gap-3 bg-primary/8 border border-primary/20 rounded-2xl px-4 py-3 text-sm text-foreground/80">
                    <span className="text-primary shrink-0"><BookOpen size={16} /></span>
-                  <span>Наведите на <span className="text-primary font-semibold">слово</span> — увидите перевод и значения. Нажмите на <span className="text-primary font-semibold">{isMobile ? "последнее слово предложения" : "точку"}</span> — перевод предложения</span>
+                  <span>Наведите на <span className="text-primary font-semibold">слово</span> — увидите перевод и значения. Нажмите на <span className="text-primary font-semibold">{isMobile ? "последнее слово предложения" : "точку"}</span> — {isMobile ? "выберите перевод слова или предложения" : "перевод предложения"}</span>
                    <button data-testid="button-dismiss-reader-hint" aria-label="Скрыть подсказку" onClick={() => { setShowHint(false); localStorage.setItem('reader-hint-dismissed', '1'); }}
                     className="ml-auto shrink-0 p-1 rounded-full hover:bg-primary/15 text-muted-foreground hover:text-foreground">
                     <X size={14} />
@@ -1338,7 +1344,9 @@ export function ReaderPage() {
                                       const isLastWord = !body.split(/(\s+)/).slice(wi + 1)
                                         .some(part => /[a-zA-Z]{2,}/.test(part));
                                       if (isMobile && isLastWord) {
-                                        handleSentenceClick(sentence);
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        setTooltip(null);
+                                        setLastWordChoice({ word: clean, sentence, x: rect.left + rect.width / 2, y: rect.top - 8 });
                                       } else {
                                         handleWordClick(e, clean, sentence);
                                       }
@@ -1464,6 +1472,36 @@ export function ReaderPage() {
         )}
         <button data-testid="button-reader-footer-next" aria-label="Следующая страница" onClick={handleNext} disabled={currentPageIdx === pages.length - 1} className="p-1 hover:text-foreground disabled:opacity-30 transition-colors"><ChevronRight size={14} /></button>
       </footer>
+
+      {/* Mobile: both translations are available for the final word. */}
+      {lastWordChoice && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center" onClick={() => setLastWordChoice(null)}>
+          <div className="absolute inset-0 bg-black/20" />
+          <div
+            role="dialog"
+            aria-label="Выбрать перевод"
+            className="relative w-full max-w-md rounded-t-2xl bg-card text-foreground p-4 pb-6 shadow-2xl border border-border"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <span className="text-sm font-semibold">Что перевести?</span>
+              <button type="button" aria-label="Закрыть выбор перевода" className="h-10 w-10 rounded-full bg-muted flex items-center justify-center" onClick={() => setLastWordChoice(null)}><X size={19} /></button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button type="button" className="min-h-14 rounded-xl bg-muted px-3 text-sm font-semibold" onClick={() => {
+                const choice = lastWordChoice;
+                setLastWordChoice(null);
+                void openWordTranslation(choice.word, choice.sentence, choice.x, choice.y);
+              }}>Слово «{lastWordChoice.word}»</button>
+              <button type="button" className="min-h-14 rounded-xl bg-primary text-primary-foreground px-3 text-sm font-semibold" onClick={() => {
+                const sentence = lastWordChoice.sentence;
+                setLastWordChoice(null);
+                void handleSentenceClick(sentence);
+              }}>Всё предложение</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Word tooltip */}
       <AnimatePresence>
